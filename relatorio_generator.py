@@ -38,7 +38,8 @@ DB_TECNICOS = {
     "talissa aparecida barbosa de andrade": {"re": "0102044461", "area": "15"},
     "welington josé domimgues batista": {"re": "0102047056", "area": "15"},
     "edenilson santos": {"re": "0124065541", "area": "15"},
-    "lucas santos de souza": {"re": "0124065541", "area": "15"},
+    "samuel vinícius de castro gomes": {"re": "0124065786", "area": "15"},
+    "lucas gabriel de almeida ramos": {"re": "0102063402", "area": "15"},
 
     # --- AREA 11 ---
     "aguilson lucas nunes moreira": {"re": "0102062737", "area": "11"},
