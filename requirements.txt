@@ -1,5 +1,6 @@
 Flask
 reportlab
 pdfrw
-gunicorn
 geopy
+telethon
+gunicorn
