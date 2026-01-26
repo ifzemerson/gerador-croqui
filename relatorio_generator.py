@@ -442,103 +442,102 @@ def dividir_tratativas(material_lines):
 
 
 def create_overlay(parsed, materials_raw, pp_list, overlay_path):
-    if not os.path.exists(TEMPLATE_PDF):
-        w_pt, h_pt = 595.27, 841.89
+    if not os.path.exists(TEMPLATE_PDF): w_pt, h_pt = 595.27, 841.89
     else:
-        tpl = PdfReader(TEMPLATE_PDF);
-        p0 = tpl.pages[0];
-        mb = p0.MediaBox
-        w_pt = float(mb[2]) - float(mb[0]);
-        h_pt = float(mb[3]) - float(mb[1])
+        tpl = PdfReader(TEMPLATE_PDF); p0 = tpl.pages[0]; mb = p0.MediaBox
+        w_pt = float(mb[2]) - float(mb[0]); h_pt = float(mb[3]) - float(mb[1])
     c = canvas.Canvas(str(overlay_path), pagesize=(w_pt, h_pt))
 
     def put_xy(key, text, size=9, manual=None):
         if not text: return
-        xp, yp = manual if manual else COORDS.get(key, (0, 0))
-        if xp == 0: return
+        xp, yp = manual if manual else COORDS.get(key, (0,0))
+        if xp==0: return
         x, y = pct_to_pt(xp, yp, w_pt, h_pt)
         c.setFont("Helvetica", size)
-        for idx, ln in enumerate(str(text).split('\n')): c.drawString(x, y - (idx * (size + 2)), ln)
+        for idx, ln in enumerate(str(text).split('\n')): c.drawString(x, y - (idx*(size+2)), ln)
 
-    for k, v in parsed.items():
+    # Preenche Textos
+    for k, v in parsed.items(): 
         if k != 'executantes_parsed': put_xy(k, v)
+    
+    # Preenche Executantes
     for i, item in enumerate(parsed.get('executantes_parsed', [])):
         if i >= EXEC_CONFIG['max_rows']: break
         cy = EXEC_CONFIG['start_y'] - (i * EXEC_CONFIG['step_y'])
         put_xy(f"nm_{i}", item['name'], 9, (EXEC_CONFIG['name_x'], cy))
         if item['re']: put_xy(f"re_{i}", item['re'], 9, (EXEC_CONFIG['re_x'], cy))
+    
+    # Preenche Materiais (Bloco lateral)
     mx, my = pct_to_pt(COORDS['materials_block'][0], COORDS['materials_block'][1], w_pt, h_pt)
     c.setFont('Helvetica', 8)
-    for i, ln in enumerate(materials_raw[:20]): c.drawString(mx, my - (i * 10), ln)
+    for i, ln in enumerate(materials_raw[:20]): c.drawString(mx, my-(i*10), ln)
+
+    # --- DEFINIÇÃO DAS VARIÁVEIS DE DESENHO (CORRIGIDO) ---
     l_pct, b_pct, r_pct, t_pct = COORDS['croqui_rect']
-    dy = h_pt * ((t_pct + b_pct) / 2)
-    lx = w_pt * (l_pct + 0.05);
-    rx = w_pt * (r_pct - 0.05)
-    c.setLineWidth(2);
-    c.setDash(4, 2);
-    c.line(lx, dy, rx, dy);
-    c.setDash([])
+    dy = h_pt * ((t_pct + b_pct) / 2)       # Draw Y (Altura da linha)
+    lx = w_pt * (l_pct + 0.05)              # Left X (Inicio da linha)
+    rx = w_pt * (r_pct - 0.05)              # Right X (Fim da linha)
+    
+    # Linha pontilhada principal
+    c.setLineWidth(2); c.setDash(4, 2); c.line(lx, dy, rx, dy); c.setDash([])
+
+    # Endereço no meio da linha
     if parsed.get('endereco'):
         addr = parsed['endereco']
-        c.setFont('Helvetica-Bold', 10);
-        tw = c.stringWidth(addr, 'Helvetica-Bold', 10)
-        cx = (lx + rx) / 2;
-        c.drawString(cx - (tw / 2), dy - 100, addr)
+        c.setFont('Helvetica-Bold', 10); tw = c.stringWidth(addr, 'Helvetica-Bold', 10)
+        cx = (lx + rx)/2; c.drawString(cx-(tw/2), dy-100, addr)
 
     def draw_box(x, y, w, h, t, lines):
         c.rect(x, y, w, h, fill=0)
-        c.setFont("Helvetica-Bold", 8);
-        c.drawString(x + 5, y + h - 10, t)
+        c.setFont("Helvetica-Bold", 8); c.drawString(x+5, y+h-10, t)
         c.setFont("Helvetica", 8)
-        for i, l in enumerate(lines): c.drawString(x + 5, y + h - 20 - (i * 10), l)
+        for i, l in enumerate(lines): c.drawString(x+5, y+h-20-(i*10), l)
 
+    # Lógica Condicional (Com ou Sem Cabo)
     if len(pp_list) == 0:
-        tot_w = rx - lx;
-        mid = lx + tot_w / 2
-        c.circle(lx, dy, 4, fill=1);
-        c.drawString(lx - 12, dy - 20, "Início")
-        c.circle(mid, dy, 4, fill=1);
-        c.drawString(mid - 8, dy - 20, "XC")
-        c.circle(rx, dy, 4, fill=1);
-        c.drawString(rx - 8, dy - 20, "Fim")
-        bw, off = 220, 35;
-        bh = 15 + 12 + (len(materials_raw) * 10)
-        bx = mid - bw / 2;
-        by = dy + off
+        # PONTO ÚNICO
+        tot_w = rx - lx; mid = lx + tot_w/2
+        c.circle(lx, dy, 4, fill=1); c.drawString(lx-12, dy-20, "Início")
+        c.circle(mid, dy, 4, fill=1); c.drawString(mid-8, dy-20, "XC")
+        c.circle(rx, dy, 4, fill=1); c.drawString(rx-8, dy-20, "Fim")
+        
+        bw, off = 220, 35; bh = 15 + 12 + (len(materials_raw)*10)
+        bx = mid - bw/2; by = dy + off
         draw_box(bx, by, bw, bh, "Tratativas", materials_raw)
-        c.line(mid, dy, mid, by);
-        c.drawString(mid - 4, by - 10, "↑")
+        c.line(mid, dy, mid, by); c.drawString(mid-4, by-10, "↑")
     else:
+        # COM LANÇAMENTO DE CABO (Aqui estava o erro)
         p1, p2 = dividir_tratativas(materials_raw)
         off, bw = 30, 180
-        h1 = 15 + 12 + (len(p1) * 10);
-        bx1, by1 = left_x - 20, dy + off
+        
+        # Caixa Esquerda (Usa lx)
+        h1 = 15 + 12 + (len(p1)*10); bx1, by1 = lx - 20, dy + off 
         draw_box(bx1, by1, bw, h1, "Tratativas E1", p1)
-        c.line(lx, dy, bx1 + bw / 2, by1)
-        h2 = 15 + 12 + (len(p2) * 10);
-        bx2, by2 = rx - bw + 20, dy + off
+        c.line(lx, dy, bx1 + bw/2, by1)
+        
+        # Caixa Direita (Usa rx)
+        h2 = 15 + 12 + (len(p2)*10); bx2, by2 = rx - bw + 20, dy + off
         draw_box(bx2, by2, bw, h2, "Tratativas E2", p2)
-        c.line(rx, dy, bx2 + bw / 2, by2)
-        step = (rx - lx) / len(pp_list);
-        cx = lx
+        c.line(rx, dy, bx2 + bw/2, by2)
+        
+        # Bolinhas ao longo do cabo
+        step = (rx - lx) / len(pp_list); cx = lx
         c.circle(cx, dy, 4, fill=1)
         has_cb = sum(pp_list) > 0
-        if has_cb: c.drawString(cx - 10, dy + 15, "VT 15m")
-        c.drawString(cx - 10, dy - 20, "XC Inicial")
+        if has_cb: c.drawString(cx-10, dy+15, "VT 15m")
+        c.drawString(cx-10, dy-20, "XC Inicial")
+        
         for i, dist in enumerate(pp_list):
-            nx = cx + step;
-            mid = (cx + nx) / 2
-            if dist > 0 and has_cb: c.drawString(mid - 15, dy + 5, f"PP {dist}m")
+            nx = cx + step; mid = (cx + nx)/2
+            if dist > 0 and has_cb: c.drawString(mid-15, dy+5, f"PP {dist}m")
             c.circle(nx, dy, 4, fill=1)
-            if i == len(pp_list) - 1:
-                c.drawString(nx - 10, dy - 20, "XC Final")
-                if has_cb: c.drawString(nx - 10, dy + 15, "VT 15m")
-            else:
-                c.drawString(nx - 8, dy - 20, "XC")
+            if i == len(pp_list)-1:
+                c.drawString(nx-10, dy-20, "XC Final")
+                if has_cb: c.drawString(nx-10, dy+15, "VT 15m")
+            else: c.drawString(nx-8, dy-20, "XC")
             cx = nx
-    c.showPage();
-    c.save()
 
+    c.showPage(); c.save()
 
 def merge_overlay(overlay_path, out_path):
     if not os.path.exists(TEMPLATE_PDF): os.replace(overlay_path, out_path); return
