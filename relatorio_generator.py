@@ -398,146 +398,163 @@ def generate_pps(total_length, vt_each=15):
     usable = total_length - (2 * vt_each)
     if usable <= 0: return []
     num_spans = max(1, round(usable / 40))
-    return [round(usable / num_spans)] * num_spans
+    span_len = round(usable / num_spans)
+    return [span_len] * num_spans
 
 
 def dividir_tratativas(material_lines):
-    divs = ["fus", "fusão", "fusões", "fusao", "tubo", "loose"]
-    esps = ["ceo", "ptro", "abertura", "reabertura", "caixa"]
+    divisiveis = ["fus", "fusão", "fusões", "fusao", "tubo", "loose"]
+    especiais = ["ceo", "ptro", "abertura", "reabertura", "caixa"]
     p1, p2 = [], []
     itens = []
-    for l in material_lines:
-        t = l.strip();
-        low = t.lower()
+    for linha in material_lines:
+        texto = linha.strip()
+        low = texto.lower()
         m = re.match(r"(\d+)\s*[-xX]?\s*(.+)", low)
-        if not m: itens.append({"qtd": 1, "nome": low, "orig": t}); continue
-        itens.append({"qtd": int(m.group(1)), "nome": m.group(2).strip(), "orig": t})
-    esps_unit = [i for i in itens if i["qtd"] == 1 and any(k in i["nome"] for k in esps)]
-    if len(esps_unit) == 2:
-        p1.append(esps_unit[0]["orig"]);
-        p2.append(esps_unit[1]["orig"])
-        rest = [i for i in itens if i not in esps_unit]
+        if not m: itens.append({"qtd": 1, "nome": low, "orig": texto}); continue
+        itens.append({"qtd": int(m.group(1)), "nome": m.group(2).strip(), "orig": texto})
+    especiais_unitarios = [i for i in itens if i["qtd"] == 1 and any(k in i["nome"] for k in especiais)]
+    if len(especiais_unitarios) == 2:
+        p1.append(especiais_unitarios[0]["orig"]);
+        p2.append(especiais_unitarios[1]["orig"])
+        restantes = [i for i in itens if i not in especiais_unitarios]
     else:
-        rest = itens.copy()
-    for i in rest:
-        qtd, nome, orig = i["qtd"], i["nome"], i["orig"]
+        restantes = itens.copy()
+    for item in restantes:
+        qtd, nome, orig = item["qtd"], item["nome"], item["orig"]
         if any(f in nome for f in FILTRO_LANCAMENTO): p1.append(orig); continue
-        if any(k in nome for k in esps):
+        if any(k in nome for k in especiais):
             if qtd == 1:
                 p1.append(orig)
             else:
-                md = qtd // 2;
-                rs = qtd - md
-                if md > 0: p1.append(f"{md} {nome}")
-                if rs > 0: p2.append(f"{rs} {nome}")
+                metade = qtd // 2;
+                resto = qtd - metade
+                if metade > 0: p1.append(f"{metade} {nome}")
+                if resto > 0: p2.append(f"{resto} {nome}")
             continue
-        if any(k in nome for k in divs):
-            md = qtd // 2;
-            rs = qtd - md
-            if md > 0: p1.append(f"{md} {nome}")
-            if rs > 0: p2.append(f"{rs} {nome}")
+        if any(k in nome for k in divisiveis):
+            metade = qtd // 2;
+            resto = qtd - metade
+            if metade > 0: p1.append(f"{metade} {nome}")
+            if resto > 0: p2.append(f"{resto} {nome}")
             continue
         p1.append(orig)
     return p1, p2
 
 
 def create_overlay(parsed, materials_raw, pp_list, overlay_path):
-    if not os.path.exists(TEMPLATE_PDF): w_pt, h_pt = 595.27, 841.89
+    if not os.path.exists(TEMPLATE_PDF):
+        width_pt, height_pt = 595.27, 841.89
     else:
-        tpl = PdfReader(TEMPLATE_PDF); p0 = tpl.pages[0]; mb = p0.MediaBox
-        w_pt = float(mb[2]) - float(mb[0]); h_pt = float(mb[3]) - float(mb[1])
-    c = canvas.Canvas(str(overlay_path), pagesize=(w_pt, h_pt))
+        tpl = PdfReader(TEMPLATE_PDF);
+        page0 = tpl.pages[0];
+        media = page0.MediaBox
+        llx, lly, urx, ury = map(float, media);
+        width_pt = urx - llx;
+        height_pt = ury - lly
+    c = canvas.Canvas(str(overlay_path), pagesize=(width_pt, height_pt))
 
-    def put_xy(key, text, size=9, manual=None):
+    def put_xy(key, text, size=9, manual_coords=None):
         if not text: return
-        xp, yp = manual if manual else COORDS.get(key, (0,0))
-        if xp==0: return
-        x, y = pct_to_pt(xp, yp, w_pt, h_pt)
+        if manual_coords:
+            xpct, ypct = manual_coords
+        elif key in COORDS:
+            xpct, ypct = COORDS[key]
+        else:
+            return
+        x, y = pct_to_pt(xpct, ypct, width_pt, height_pt)
         c.setFont("Helvetica", size)
-        for idx, ln in enumerate(str(text).split('\n')): c.drawString(x, y - (idx*(size+2)), ln)
+        lines = str(text).split('\n')
+        for i, ln in enumerate(lines): c.drawString(x, y - (i * (size + 2)), ln)
 
-    # Preenche Textos
-    for k, v in parsed.items(): 
-        if k != 'executantes_parsed': put_xy(k, v)
-    
-    # Preenche Executantes
-    for i, item in enumerate(parsed.get('executantes_parsed', [])):
+    for key, val in parsed.items():
+        if key not in ['executantes_parsed']: put_xy(key, val, size=9)
+    execs = parsed.get('executantes_parsed', [])
+    for i, item in enumerate(execs):
         if i >= EXEC_CONFIG['max_rows']: break
-        cy = EXEC_CONFIG['start_y'] - (i * EXEC_CONFIG['step_y'])
-        put_xy(f"nm_{i}", item['name'], 9, (EXEC_CONFIG['name_x'], cy))
-        if item['re']: put_xy(f"re_{i}", item['re'], 9, (EXEC_CONFIG['re_x'], cy))
-    
-    # Preenche Materiais (Bloco lateral)
-    mx, my = pct_to_pt(COORDS['materials_block'][0], COORDS['materials_block'][1], w_pt, h_pt)
+        current_y = EXEC_CONFIG['start_y'] - (i * EXEC_CONFIG['step_y'])
+        put_xy(f"exec_{i}", item['name'].title(), size=9, manual_coords=(EXEC_CONFIG['name_x'], current_y))
+        if item['re']: put_xy(f"re_{i}", item['re'], size=9, manual_coords=(EXEC_CONFIG['re_x'], current_y))
+    mxp, myp = COORDS['materials_block']
+    mx, my = pct_to_pt(mxp, myp, width_pt, height_pt)
     c.setFont('Helvetica', 8)
-    for i, ln in enumerate(materials_raw[:20]): c.drawString(mx, my-(i*10), ln)
-
-    # --- DEFINIÇÃO DAS VARIÁVEIS DE DESENHO (CORRIGIDO) ---
-    l_pct, b_pct, r_pct, t_pct = COORDS['croqui_rect']
-    dy = h_pt * ((t_pct + b_pct) / 2)       # Draw Y (Altura da linha)
-    lx = w_pt * (l_pct + 0.05)              # Left X (Inicio da linha)
-    rx = w_pt * (r_pct - 0.05)              # Right X (Fim da linha)
-    
-    # Linha pontilhada principal
-    c.setLineWidth(2); c.setDash(4, 2); c.line(lx, dy, rx, dy); c.setDash([])
-
-    # Endereço no meio da linha
+    for i, line in enumerate(materials_raw[:20]): c.drawString(mx, my - (i * 10), line)
+    left_pct, bottom_pct, right_pct, top_pct = COORDS['croqui_rect']
+    draw_y = height_pt * ((top_pct + bottom_pct) / 2)
+    left_x = width_pt * (left_pct + 0.05);
+    right_x = width_pt * (right_pct - 0.05)
+    c.setLineWidth(2);
+    c.setDash(4, 2);
+    c.line(left_x, draw_y, right_x, draw_y);
+    c.setDash([])
     if parsed.get('endereco'):
         addr = parsed['endereco']
-        c.setFont('Helvetica-Bold', 10); tw = c.stringWidth(addr, 'Helvetica-Bold', 10)
-        cx = (lx + rx)/2; c.drawString(cx-(tw/2), dy-100, addr)
-
-    def draw_box(x, y, w, h, t, lines):
-        c.rect(x, y, w, h, fill=0)
-        c.setFont("Helvetica-Bold", 8); c.drawString(x+5, y+h-10, t)
-        c.setFont("Helvetica", 8)
-        for i, l in enumerate(lines): c.drawString(x+5, y+h-20-(i*10), l)
-
-    # Lógica Condicional (Com ou Sem Cabo)
+        c.setFont('Helvetica-Bold', 10);
+        tw = c.stringWidth(addr, 'Helvetica-Bold', 10)
+        cx = (left_x + right_x) / 2;
+        c.drawString(cx - (tw / 2), draw_y - 100, addr)
     if len(pp_list) == 0:
-        # PONTO ÚNICO
-        tot_w = rx - lx; mid = lx + tot_w/2
-        c.circle(lx, dy, 4, fill=1); c.drawString(lx-12, dy-20, "Início")
-        c.circle(mid, dy, 4, fill=1); c.drawString(mid-8, dy-20, "XC")
-        c.circle(rx, dy, 4, fill=1); c.drawString(rx-8, dy-20, "Fim")
-        
-        bw, off = 220, 35; bh = 15 + 12 + (len(materials_raw)*10)
-        bx = mid - bw/2; by = dy + off
-        draw_box(bx, by, bw, bh, "Tratativas", materials_raw)
-        c.line(mid, dy, mid, by); c.drawString(mid-4, by-10, "↑")
+        total_width = right_x - left_x;
+        mid_x = left_x + total_width / 2
+        c.circle(left_x, draw_y, 4, fill=1);
+        c.drawString(left_x - 12, draw_y - 20, "Início")
+        c.circle(mid_x, draw_y, 4, fill=1);
+        c.drawString(mid_x - 8, draw_y - 20, "XC")
+        c.circle(right_x, draw_y, 4, fill=1);
+        c.drawString(right_x - 8, draw_y - 20, "Fim")
+        box_width, offset = 220, 35;
+        box_height = 15 + 12 + (len(materials_raw) * 10)
+        box_x = mid_x - (box_width / 2);
+        box_y = draw_y + offset
+        c.rect(box_x, box_y, box_width, box_height, fill=0)
+        c.setFont("Helvetica-Bold", 8);
+        c.drawString(box_x + 5, box_y + box_height - 10, "Tratativas")
+        c.setFont("Helvetica", 8);
+        text_start_y = box_y + box_height - 12 - 8
+        for i, item in enumerate(materials_raw): c.drawString(box_x + 5, text_start_y - (i * 10), item)
+        c.line(mid_x, draw_y, mid_x, box_y);
+        c.drawString(mid_x - 4, box_y - 10, "↑")
     else:
-        # COM LANÇAMENTO DE CABO (Aqui estava o erro)
-        p1, p2 = dividir_tratativas(materials_raw)
-        off, bw = 30, 180
-        
-        # Caixa Esquerda (Usa lx)
-        h1 = 15 + 12 + (len(p1)*10); bx1, by1 = lx - 20, dy + off 
-        draw_box(bx1, by1, bw, h1, "Tratativas E1", p1)
-        c.line(lx, dy, bx1 + bw/2, by1)
-        
-        # Caixa Direita (Usa rx)
-        h2 = 15 + 12 + (len(p2)*10); bx2, by2 = rx - bw + 20, dy + off
-        draw_box(bx2, by2, bw, h2, "Tratativas E2", p2)
-        c.line(rx, dy, bx2 + bw/2, by2)
-        
-        # Bolinhas ao longo do cabo
-        step = (rx - lx) / len(pp_list); cx = lx
-        c.circle(cx, dy, 4, fill=1)
-        has_cb = sum(pp_list) > 0
-        if has_cb: c.drawString(cx-10, dy+15, "VT 15m")
-        c.drawString(cx-10, dy-20, "XC Inicial")
-        
+        p1_list, p2_list = dividir_tratativas(materials_raw)
+        offset, box_width = 30, 180
+        h1 = 15 + 12 + (len(p1_list) * 10);
+        bx1, by1 = left_x - 20, draw_y + offset
+        c.rect(bx1, by1, box_width, h1, fill=0)
+        c.setFont("Helvetica-Bold", 8);
+        c.drawString(bx1 + 5, by1 + h1 - 10, "Tratativas E1")
+        c.setFont("Helvetica", 8);
+        tsy1 = by1 + h1 - 20
+        for i, item in enumerate(p1_list): c.drawString(bx1 + 5, tsy1 - (i * 10), item)
+        c.line(left_x, draw_y, bx1 + box_width / 2, by1)
+        h2 = 15 + 12 + (len(p2_list) * 10);
+        bx2, by2 = right_x - box_width + 20, draw_y + offset
+        c.rect(bx2, by2, box_width, h2, fill=0)
+        c.setFont("Helvetica-Bold", 8);
+        c.drawString(bx2 + 5, by2 + h2 - 10, "Tratativas E2")
+        c.setFont("Helvetica", 8);
+        tsy2 = by2 + h2 - 20
+        for i, item in enumerate(p2_list): c.drawString(bx2 + 5, tsy2 - (i * 10), item)
+        c.line(right_x, draw_y, bx2 + box_width / 2, by2)
+        total_width = right_x - left_x;
+        step = total_width / len(pp_list);
+        cur_x = left_x
+        c.circle(cur_x, draw_y, 4, fill=1)
+        has_cable = sum(pp_list) > 0
+        if has_cable: c.drawString(cur_x - 10, draw_y + 15, "VT 15m")
+        c.drawString(cur_x - 10, draw_y - 20, "XC Inicial")
         for i, dist in enumerate(pp_list):
-            nx = cx + step; mid = (cx + nx)/2
-            if dist > 0 and has_cb: c.drawString(mid-15, dy+5, f"PP {dist}m")
-            c.circle(nx, dy, 4, fill=1)
-            if i == len(pp_list)-1:
-                c.drawString(nx-10, dy-20, "XC Final")
-                if has_cb: c.drawString(nx-10, dy+15, "VT 15m")
-            else: c.drawString(nx-8, dy-20, "XC")
-            cx = nx
-
-    c.showPage(); c.save()
+            nxt_x = cur_x + step;
+            mid = (cur_x + nxt_x) / 2
+            if dist > 0 and has_cable: c.drawString(mid - 15, draw_y + 5, f"PP {dist}m")
+            c.circle(nxt_x, draw_y, 4, fill=1)
+            if i == len(pp_list) - 1:
+                c.drawString(nxt_x - 10, draw_y - 20, "XC Final")
+                if has_cable: c.drawString(nxt_x - 10, draw_y + 15, "VT 15m")
+            else:
+                c.drawString(nxt_x - 8, draw_y - 20, "XC")
+            cur_x = nxt_x
+    c.showPage();
+    c.save()
 
 def merge_overlay(overlay_path, out_path):
     if not os.path.exists(TEMPLATE_PDF): os.replace(overlay_path, out_path); return
