@@ -42,7 +42,6 @@ DB_TECNICOS = {
     "julio cesar mendes de moraes": {"re": "0102050030", "area": "15"},
     "leandro dias da costa junior": {"re": "0102055139", "area": "15"},
     "leonardo félix cruz junior": {"re": "0102063528", "area": "15"},
-    "marcos paulo dos santos": {"re": "0124064676", "area": "15"},
     "murilo de oliveira fructuosoda graça": {"re": "0102063941", "area": "15"},
     "pablo daniel amaro antonio": {"re": "0102059303", "area": "15"},
     "roger ribeiro gomes": {"re": "0102054899", "area": "15"},
@@ -50,7 +49,6 @@ DB_TECNICOS = {
     "talissa aparecida barbosa de andrade": {"re": "0102044461", "area": "15"},
     "welington josé domimgues batista": {"re": "0102047056", "area": "15"},
     "edenilson santos": {"re": "0124065541", "area": "15"},
-    "samuel vinícius de castro gomes": {"re": "0124065786", "area": "15"},
     "lucas gabriel de almeida ramos": {"re": "0102063402", "area": "15"},
 
     # --- AREA 11 ---
