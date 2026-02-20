@@ -111,7 +111,9 @@ DB_TECNICOS = {
     "max william de castro da silva": {"re": "0102064490", "area": "12"},
     "renato dos santos": {"re": "0102047067", "area": "12"},
     "samuel antonio de siqueira": {"re": "0102047061", "area": "12"},
-    "silas de araujo rocha": {"re": "0102047063", "area": "12"}
+    "silas de araujo rocha": {"re": "0102047063", "area": "12"},
+    "augusto cesar rodrigues da matta": {"re": "0102047087", "area": "12"},
+    "sergio luiz rabelo junior": {"re": "0102061768", "area": "12"},
 }
 
 DB_ALIASES = {
