@@ -1,6 +1,8 @@
 Flask
 reportlab
 pdfrw
-geopy
-telethon
 gunicorn
+geopy
+requests
+firebase-admin
+telethon
