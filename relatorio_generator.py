@@ -6,12 +6,17 @@ import re, random, os, json
 import asyncio
 from telethon import TelegramClient
 
+# --- BIBLIOTECAS FIREBASE ---
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import db as firebase_db
+
 # --- BIBLIOTECAS DE MAPA ---
 from geopy.geocoders import Nominatim, ArcGIS, GoogleV3
 from geopy.exc import GeocoderTimedOut
 
 app = Flask(__name__)
-app.secret_key = "1307"  # Necessário para o login funcionar
+app.secret_key = "1307"
 
 # --- CONFIGURAÇÕES GERAIS ---
 GOOGLE_API_KEY = "AIzaSyCZXAgi1EQntbx7U3SyZI3I4xWj25E2sq0"
@@ -23,6 +28,23 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 ADMIN_PASSWORD = "vivo"
 
 # ==========================================
+# CONFIGURAÇÕES DO FIREBASE (NUVEM)
+# ==========================================
+# Cole aqui o link do seu banco de dados (NÃO se esqueça de manter as aspas simples e o link terminar com .com/)
+FIREBASE_DB_URL = 'https://geradorcroqui-default-rtdb.firebaseio.com/'
+
+# Inicializa a conexão com o Firebase de forma segura
+if not firebase_admin._apps:
+    try:
+        cred = credentials.Certificate("firebase-key.json")
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': FIREBASE_DB_URL
+        })
+        print("✅ Conectado ao Firebase com sucesso!")
+    except Exception as e:
+        print(f"❌ Erro ao conectar ao Firebase: {e}")
+
+# ==========================================
 # CONFIGURAÇÕES DO TELEGRAM
 # ==========================================
 TELEGRAM_API_ID = 33091552
@@ -31,22 +53,40 @@ TELEGRAM_GROUP_IDS = [-4209680542, -4112543320]
 TELEGRAM_SESSION = 'sessao_usuario'
 
 # ==========================================
-# BANCO DE DADOS DINÂMICO (JSON)
+# DADOS PADRÃO (Para iniciar o banco de dados)
 # ==========================================
-DATA_FILE = "banco_dados.json"
-
-# DADOS PADRÃO (Caso seja a primeira vez rodando)
 DB_TECNICOS_DEFAULT = {
     "agnaldo venancio brisola": {"re": "0102060458", "area": "15"},
+    "alessandro ferreira de morais": {"re": "0102047065", "area": "15"},
     "cleiton irani rodrigues benfica": {"re": "0102059450", "area": "15"},
     "emerson pereira da silva": {"re": "0102059848", "area": "15"},
+    "erickson fernando leme": {"re": "0102053031", "area": "15"},
+    "joaquim otavio machado vaz": {"re": "0102063826", "area": "15"},
+    "julio cesar mendes de moraes": {"re": "0102050030", "area": "15"},
+    "leandro dias da costa junior": {"re": "0102055139", "area": "15"},
+    "leonardo félix cruz junior": {"re": "0102063528", "area": "15"},
+    "murilo de oliveira fructuosoda graça": {"re": "0102063941", "area": "15"},
+    "pablo daniel amaro antonio": {"re": "0102059303", "area": "15"},
+    "roger ribeiro gomes": {"re": "0102054899", "area": "15"},
+    "ruan augusto dos santos caetano": {"re": "0124064626", "area": "15"},
+    "talissa aparecida barbosa de andrade": {"re": "0102044461", "area": "15"},
+    "welington josé domimgues batista": {"re": "0102047056", "area": "15"},
     "edenilson santos": {"re": "0124065541", "area": "15"},
-    # ... (Adicione mais padrões se quiser, ou use o painel admin)
+    "lucas gabriel de almeida ramos": {"re": "0102063402", "area": "15"},
+    "clovis mateus de aguiar": {"re": "0102059436", "area": "12"},
+    "ederval jose fernandes": {"re": "0102055514", "area": "12"}
 }
 
 DB_VEICULOS_DEFAULT = {
+    "leonardo félix cruz junior": "RVW5G87",
+    "leandro dias da costa junior": "RVI3G26",
+    "murilo de oliveira fructuosoda graça": "RTR3F69",
     "agnaldo venancio brisola": "RTR3F69",
     "emerson pereira da silva": "RVQ0G58",
+    "pablo daniel amaro antonio": "RTI7C83",
+    "alessandro ferreira de morais": "RVJ6D74",
+    "roger ribeiro gomes": "RVI3G26",
+    "julio cesar mendes de moraes": "RVJ6D77",
     "cleiton irani rodrigues benfica": "RUX6C72"
 }
 
@@ -56,24 +96,34 @@ DB_ALIASES = {
 }
 
 
-# FUNÇÕES DO BANCO DE DADOS
+# --- FUNÇÕES DE COMUNICAÇÃO COM A NUVEM (FIREBASE) ---
 def load_db():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            pass
+    try:
+        ref = firebase_db.reference('/')
+        data = ref.get()
 
-    # Se não existe, cria um novo
-    db_inicial = {"tecnicos": DB_TECNICOS_DEFAULT, "veiculos": DB_VEICULOS_DEFAULT}
-    save_db(db_inicial)
-    return db_inicial
+        # Se for a primeira vez e o banco estiver vazio na nuvem
+        if not data:
+            db_inicial = {"tecnicos": DB_TECNICOS_DEFAULT, "veiculos": DB_VEICULOS_DEFAULT}
+            save_db(db_inicial)
+            return db_inicial
+
+        # Garante que as categorias existem caso tenham sido apagadas
+        if 'tecnicos' not in data: data['tecnicos'] = {}
+        if 'veiculos' not in data: data['veiculos'] = {}
+
+        return data
+    except Exception as e:
+        print(f"Erro ao ler Firebase (A usar Backup em memória): {e}")
+        return {"tecnicos": DB_TECNICOS_DEFAULT, "veiculos": DB_VEICULOS_DEFAULT}
 
 
 def save_db(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    try:
+        ref = firebase_db.reference('/')
+        ref.set(data)
+    except Exception as e:
+        print(f"Erro ao guardar no Firebase: {e}")
 
 
 # --- CONFIGURAÇÕES DE PDF ---
@@ -192,7 +242,6 @@ def clean_materials(raw_text):
     return cleaned_items
 
 
-# --- LÓGICA DE EXTRAÇÃO APRIMORADA ---
 def extract_fields(text, db):
     data = {key: '' for key in
             ['ta', 'codigo_obra', 'causa', 'endereco', 'localidade', 'es', 'at', 'tronco', 'veiculo', 'data',
@@ -527,7 +576,6 @@ function toggleEdit(rowId) {
     let isEditing = inputs[0].style.display !== 'none';
 
     if (isEditing) {
-        // Cancelar Edição
         spans.forEach(s => s.style.display = '');
         inputs.forEach(i => i.style.display = 'none');
         btnEdit.style.display = '';
@@ -535,7 +583,6 @@ function toggleEdit(rowId) {
         btnCancel.style.display = 'none';
         btnDel.style.display = '';
     } else {
-        // Iniciar Edição
         spans.forEach(s => s.style.display = 'none');
         inputs.forEach(i => i.style.display = '');
         btnEdit.style.display = 'none';
@@ -548,7 +595,7 @@ function toggleEdit(rowId) {
 </head><body>
 <div class="container">
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eee; padding-bottom:15px; margin-bottom:20px;">
-        <h2>⚙️ Gerenciar Técnicos</h2>
+        <h2>⚙️ Gerenciar Técnicos na Nuvem</h2>
         <div><a href="/" style="text-decoration:none; color:#007bff; margin-right:15px;">&laquo; Gerador</a> <a href="/logout" style="text-decoration:none; color:#dc3545;">Sair</a></div>
     </div>
 
@@ -593,14 +640,13 @@ function toggleEdit(rowId) {
                 <button type="button" class="btn btn-edit" onclick="toggleEdit('row-{{ loop.index }}')">Editar</button>
                 <button type="submit" class="btn btn-save" style="display:none;">Salvar</button>
                 <button type="button" class="btn btn-cancel" style="display:none;" onclick="toggleEdit('row-{{ loop.index }}')">Cancelar</button>
-
             </td>
             </form>
-            <td style="border-left:none;">
+            <td style="border-left:none; text-align:center; width: 60px;">
                  <form method="post" style="display:inline;">
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="nome" value="{{ nome }}">
-                    <button type="submit" class="btn btn-del">Excluir</button>
+                    <button type="submit" class="btn btn-del view-data">Excluir</button>
                 </form>
             </td>
         </tr>
@@ -611,12 +657,12 @@ function toggleEdit(rowId) {
 </body></html>
 """
 
-PASTE_HTML = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Colar Relatório</title><style>body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;padding:20px;text-align:center;margin:0}.container{width:90%;max-width:700px;margin:20px auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}textarea{width:100%;height:300px;padding:15px;margin-bottom:20px;border:2px solid #ddd;border-radius:8px;font-size:16px;font-family:monospace;resize:vertical;background-color:#fafafa;box-sizing:border-box}textarea:focus{border-color:#007bff;outline:none;background:#fff}button{width:100%;padding:15px;font-size:18px;background:#007bff;color:#fff;border:none;border-radius:6px;cursor:pointer;transition:0.2s;font-weight:bold;margin-bottom:15px}button:hover{background:#0056b3}h2{color:#333;margin-bottom:10px}.manual-link{display:inline-block;margin-top:15px;color:#666;text-decoration:none;font-size:14px; margin-right:15px;}.manual-link:hover{text-decoration:underline;color:#007bff}.info{color:#666;font-size:14px;margin-bottom:20px}</style></head><body><div class="container"><h2>Gerador de Croquis</h2><p class="info">Cole abaixo o texto do WhatsApp ou do Sistema <strong>GENESIS</strong>.</p><form method="post" action="/preencher"><textarea name="raw_text" placeholder="Cole aqui..."></textarea><br><button type="submit">Processar Texto &raquo;</button></form><div><a href="/form" class="manual-link">Preencher manualmente</a> | <a href="/admin" class="manual-link" style="color:#28a745;">⚙️ Painel de Técnicos</a></div></div></body></html>"""
+PASTE_HTML = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Colar Relatório</title><style>body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;padding:20px;text-align:center;margin:0}.container{width:90%;max-width:700px;margin:20px auto;background:#fff;padding:25px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}textarea{width:100%;height:300px;padding:15px;margin-bottom:20px;border:2px solid #ddd;border-radius:8px;font-size:16px;font-family:monospace;resize:vertical;background-color:#fafafa;box-sizing:border-box}textarea:focus{border-color:#007bff;outline:none;background:#fff}button{width:100%;padding:15px;font-size:18px;background:#007bff;color:#fff;border:none;border-radius:6px;cursor:pointer;transition:0.2s;font-weight:bold;margin-bottom:15px}button:hover{background:#0056b3}h2{color:#333;margin-bottom:10px}.manual-link{display:inline-block;margin-top:15px;color:#666;text-decoration:none;font-size:14px; margin-right:15px;}.manual-link:hover{text-decoration:underline;color:#007bff}.info{color:#666;font-size:14px;margin-bottom:20px}</style></head><body><div class="container"><h2>Gerador de Croquis</h2><p class="info">Cole abaixo o texto do WhatsApp ou do Sistema <strong>GENESIS</strong>.</p><form method="post" action="/preencher"><textarea name="raw_text" placeholder="Cole aqui..."></textarea><br><button type="submit">Processar Texto &raquo;</button></form><div><a href="/form" class="manual-link">Preencher manualmente</a> | <a href="/admin" class="manual-link" style="color:#28a745;">☁️ Painel de Técnicos</a></div></div></body></html>"""
 
 FORM_HTML = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Confirmar</title><style>body{font-family:'Segoe UI',sans-serif;background:#f0f2f5;padding:10px;margin:0}.container{width:95%;max-width:900px;margin:10px auto;background:#fff;padding:20px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.05);box-sizing:border-box}input,textarea{width:100%;padding:12px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;font-size:16px;box-sizing:border-box}textarea{height:150px;font-family:monospace}button{padding:15px;font-size:16px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;color:#fff;width:100%;margin-bottom:10px}#btn-validate{background:#28a745}#btn-validate:hover{background:#218838}h3{margin-top:20px;border-bottom:2px solid #eee;padding-bottom:10px;color:#444;font-size:18px}label{font-weight:600;font-size:14px;color:#555;display:block;margin-bottom:5px}.error{border:2px solid #dc3545!important;background:#fff0f0}.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:15px}.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px}@media(max-width:768px){.grid-2,.grid-3{grid-template-columns:1fr;gap:10px}.container{padding:15px;width:100%}}.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999;display:none;justify-content:center;align-items:center}.modal-content{background:#fff;padding:25px;border-radius:12px;width:90%;max-width:400px;box-shadow:0 5px 15px rgba(0,0,0,0.3)}.modal-title{font-size:1.2rem;font-weight:bold;margin-bottom:15px;color:#dc3545}.modal-list{margin-bottom:20px;padding-left:20px;color:#333}.modal-actions{display:flex;flex-direction:column;gap:10px}#btn-modal-back{background:#6c757d}#btn-modal-proceed{background:#007bff}.tag{display:inline-block;background:#e9ecef;color:#333;padding:8px 14px;border-radius:20px;margin:4px;font-size:14px;border:1px solid #ddd}.tag span{margin-left:10px;cursor:pointer;color:#dc3545;font-weight:bold}#exec-list{max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:4px;margin-bottom:10px}#exec-list div{padding:12px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;justify-content:space-between}#exec-list div:hover{background:#f8f9fa;color:#007bff}.area-badge{color:#999;font-size:0.9em}.back-btn{background:#007bff;text-decoration:none;display:block;color:white;padding:15px;border-radius:5px;text-align:center;margin-bottom:10px;font-weight:bold}</style></head><script>document.addEventListener('DOMContentLoaded',()=>{let tecnicos=[];let selecionados={{ executantes_list|tojson }};let veiculosMap={{ veiculos_map|tojson }};fetch('/tecnicos').then(r=>r.json()).then(d=>tecnicos=d);const form=document.querySelector('form');const input=document.getElementById('exec-input');const list=document.getElementById('exec-list');const hidden=document.getElementById('exec-hidden');const tagsBox=document.getElementById('exec-tags');const inputVeiculo=document.querySelector('input[name="veiculo"]');const modalOverlay=document.getElementById('modal-overlay');const modalList=document.getElementById('modal-list');const btnValidate=document.getElementById('btn-validate');const btnModalBack=document.getElementById('btn-modal-back');const btnModalProceed=document.getElementById('btn-modal-proceed');function atualizarHidden(){hidden.value=selecionados.join(', ');if(selecionados.length>0)input.classList.remove('error')}function renderTags(){tagsBox.innerHTML='';selecionados.forEach(nome=>{const tag=document.createElement('div');tag.className='tag';tag.innerHTML=`${nome} <span>&times;</span>`;tag.querySelector('span').onclick=()=>{selecionados=selecionados.filter(n=>n!==nome);atualizarHidden();renderTags()};tagsBox.appendChild(tag)})}renderTags();atualizarHidden();input.addEventListener('input',()=>{const v=input.value.toLowerCase();list.innerHTML='';if(!v)return;input.classList.remove('error');tecnicos.filter(t=>t.name.toLowerCase().includes(v)&&!selecionados.includes(t.name)).slice(0,8).forEach(t=>{const div=document.createElement('div');div.innerHTML=`<span>${t.name}</span> <span class="area-badge">Area ${t.area}</span>`;div.onclick=()=>{selecionados.push(t.name);if(veiculosMap[t.name]&&inputVeiculo.value==="")inputVeiculo.value=veiculosMap[t.name];inputVeiculo.classList.remove('error');atualizarHidden();renderTags();input.value='';list.innerHTML=''};list.appendChild(div)})});document.querySelectorAll('input, textarea').forEach(el=>{el.addEventListener('input',function(){if(this.value.trim()!=='')this.classList.remove('error')})});btnValidate.addEventListener('click',(e)=>{e.preventDefault();let missing=[];const fields=[{name:'ta',label:'TA'},{name:'codigo_obra',label:'Código Obra'},{name:'causa',label:'Causa'},{name:'endereco',label:'Endereço'},{name:'localidade',label:'Localidade'},{name:'tronco',label:'Tronco'},{name:'veiculo',label:'Veículo'},{name:'supervisor',label:'Supervisor'},{name:'data',label:'Data'},{name:'itens',label:'Tratativas'}];fields.forEach(f=>{const el=document.querySelector(`[name="${f.name}"]`);if(!el.value.trim()){el.classList.add('error');missing.push(f.label)}});if(selecionados.length===0){input.classList.add('error');missing.push('Executantes')}if(missing.length>0){modalList.innerHTML=missing.map(i=>`<li>${i}</li>`).join('');modalOverlay.style.display='flex'}else{form.submit()}});btnModalBack.addEventListener('click',()=>{modalOverlay.style.display='none'});btnModalProceed.addEventListener('click',()=>{modalOverlay.style.display='none';form.submit()})});</script><body><div id="modal-overlay" class="modal-overlay"><div class="modal-content"><div class="modal-title">Campos Vazios</div><p>Faltam preencher:</p><ul id="modal-list" class="modal-list"></ul><div class="modal-actions"><button id="btn-modal-back" type="button">Voltar</button><button id="btn-modal-proceed" type="button">Gerar Assim Mesmo</button></div></div></div><div class="container"><form method="post" action="/generate" target="_blank"><input type="hidden" name="lat" value="{{ data.get('lat','') }}"><input type="hidden" name="lon" value="{{ data.get('lon','') }}"><h3>Dados Principais</h3><div class="grid-2"><div><label>TA</label><input name="ta" value="{{ data.get('ta','') }}"></div><div><label>Código Obra (SGM)</label><input name="codigo_obra" value="{{ data.get('codigo_obra','') }}"></div></div><label>Causa</label><input name="causa" value="{{ data.get('causa','') }}"><label>Endereço</label><input name="endereco" value="{{ data.get('endereco','') }}"><div class="grid-3"><div><label>Localidade</label><input name="localidade" value="{{ data.get('localidade','') }}"></div><div><label>ES</label><input name="es" value="{{ data.get('es','') }}"></div><div><label>AT</label><input name="at" value="{{ data.get('at','') }}"></div></div><div class="grid-2"><div><label>Tronco</label><input name="tronco" value="{{ data.get('tronco','') }}"></div><div><label>Veículo</label><input name="veiculo" value="{{ data.get('veiculo','') }}"></div></div><div class="grid-2"><div><label>Supervisor</label><input name="supervisor" value="{{ data.get('supervisor','Wellington') }}"></div><div><label>Data</label><input name="data" value="{{ data.get('data','') }}"></div></div><h3>Executantes</h3><div id="exec-tags" style="margin-bottom:10px"></div><input id="exec-input" placeholder="Buscar técnico..."><div id="exec-list"></div><input type="hidden" name="executantes" id="exec-hidden"><h3>Tratativas</h3><textarea name="itens">{{ itens_texto }}</textarea><div style="margin-top:30px"><button id="btn-validate" type="submit">Gerar PDF</button><a href="/" class="back-btn">Voltar</a></div></form></div></body></html>"""
 
 
-# --- ROTAS NOVAS (ADMINISTRAÇÃO) ---
+# --- ROTAS NOVAS (ADMINISTRAÇÃO FIREBASE) ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -637,8 +683,7 @@ def logout():
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('login'))
+    if not session.get('admin_logged_in'): return redirect(url_for('login'))
 
     db = load_db()
     if request.method == 'POST':
@@ -656,7 +701,7 @@ def admin():
                 if placa: db['veiculos'][nome] = placa
                 save_db(db)
 
-        # --- EDITAR (NOVO!) ---
+        # --- EDITAR ---
         elif action == 'edit':
             orig_nome = request.form.get('original_nome')
             new_nome = request.form.get('new_nome', '').strip().lower()
@@ -665,18 +710,15 @@ def admin():
             placa = request.form.get('placa', '').strip().upper()
 
             if orig_nome and new_nome and orig_nome in db['tecnicos']:
-                # Se mudou o nome, deleta o antigo primeiro
                 if new_nome != orig_nome:
                     del db['tecnicos'][orig_nome]
                     if orig_nome in db['veiculos']: del db['veiculos'][orig_nome]
 
-                # Cria/Atualiza com os dados novos
                 db['tecnicos'][new_nome] = {'re': re_code, 'area': area}
                 if placa:
                     db['veiculos'][new_nome] = placa
-                elif new_nome in db['veiculos']:  # Se apagou a placa na edição
+                elif new_nome in db['veiculos']:
                     del db['veiculos'][new_nome]
-
                 save_db(db)
 
         # --- REMOVER ---
@@ -688,7 +730,6 @@ def admin():
 
         return redirect(url_for('admin'))
 
-    # Ordena por nome para facilitar a busca visual
     tecnicos_sorted = dict(sorted(db['tecnicos'].items()))
     return render_template_string(ADMIN_HTML, tecnicos=tecnicos_sorted, veiculos=db['veiculos'])
 
@@ -712,13 +753,12 @@ def form_vazio():
 
 @app.route('/preencher', methods=['POST'])
 def preencher():
-    db = load_db()  # Carrega Banco Atualizado
+    db = load_db()
     raw_text = request.form.get('raw_text', '')
     parsed_manual, material_lines = extract_fields(raw_text, db)
 
     ta_encontrada = parsed_manual.get('ta')
     if ta_encontrada:
-        print(f"Buscando complemento no Telegram para TA: {ta_encontrada}")
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -731,7 +771,7 @@ def preencher():
                     if not parsed_manual[campo] and parsed_telegram[campo]:
                         parsed_manual[campo] = parsed_telegram[campo]
         except Exception as e:
-            print(f"Erro ao buscar no Telegram: {e}")
+            print(f"Erro Telegram: {e}")
 
     exec_names = [e['name'].title() for e in parsed_manual.get('executantes_parsed', [])]
     itens_texto = "\n".join(material_lines)
@@ -749,7 +789,7 @@ def outputs(filename): return send_from_directory(OUTPUT_DIR, filename)
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    db = load_db()  # Carrega Banco Atualizado
+    db = load_db()
     execs_string = request.form.get('executantes', '')
     exec_list = []
     if execs_string:
@@ -758,10 +798,8 @@ def generate():
             if clean in db['tecnicos']:
                 re_code = db['tecnicos'][clean].get('re', '')
                 parts = clean.split()
-                if len(parts) > 1:
-                    short_name = f"{parts[0].capitalize()} {parts[-1].capitalize()}"
-                else:
-                    short_name = clean.capitalize()
+                short_name = f"{parts[0].capitalize()} {parts[-1].capitalize()}" if len(
+                    parts) > 1 else clean.capitalize()
                 exec_list.append({'name': short_name, 're': re_code})
             else:
                 exec_list.append({'name': clean.title(), 're': ''})
@@ -779,38 +817,30 @@ def generate():
     itens_raw = request.form.get('itens', '')
     material_lines = [formatar_texto(l.strip()) for l in itens_raw.splitlines() if l.strip()]
 
-    # Separa por vírgulas (caso editado manualmente no html)
     final_materials = []
     for line in material_lines:
         if ',' in line:
-            parts = line.split(',')
-            for p in parts:
+            for p in line.split(','):
                 if p.strip(): final_materials.append(formatar_texto(p.strip()))
         else:
             final_materials.append(line)
 
     material_lines = final_materials
-
     total_len = detect_launch(material_lines)
     is_double_point = False
-    if total_len is None:
-        if detect_double_point(material_lines): is_double_point = True; total_len = 0
+    if total_len is None and detect_double_point(material_lines):
+        is_double_point = True;
+        total_len = 0
 
-    pp_list = []
-    if total_len is not None:
-        if total_len > 0:
-            pp_list = generate_pps(total_len)
-        elif is_double_point:
-            pp_list = [0, 0, 0, 0]
+    pp_list = generate_pps(total_len) if total_len is not None and total_len > 0 else (
+        [0, 0, 0, 0] if is_double_point else [])
 
-    codigo = parsed.get('ta') or f"doc_{random.randint(1000, 9999)}"
-    codigo = re.sub(r'[^\w\-]', '', codigo)
-
+    codigo = re.sub(r'[^\w\-]', '', parsed.get('ta') or f"doc_{random.randint(1000, 9999)}")
     overlay_path = OUTPUT_DIR / f"{codigo}_overlay.pdf"
     out_pdf = OUTPUT_DIR / f"{codigo}.pdf"
+
     create_overlay(parsed, material_lines, pp_list, overlay_path)
     merge_overlay(overlay_path, out_pdf)
-
     return redirect(url_for('view_pdf', filename=out_pdf.name))
 
 
