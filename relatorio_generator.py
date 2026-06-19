@@ -35,7 +35,7 @@ ADMIN_PASSWORD = "vivo"
 # ==========================================
 # CONFIGURAÇÕES DO FIREBASE (NUVEM)
 # ==========================================
-FIREBASE_DB_URL = 'https://geradorcroqui-default-rtdb.firebaseio.com/'
+FIREBASE_DB_URL = 'https://nuvemgeradordecroqui-default-rtdb.firebaseio.com/tecnicos'
 
 if not firebase_admin._apps:
     try:
