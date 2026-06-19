@@ -598,7 +598,22 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     mx, my = pct_to_pt(COORDS['materials_block'][0], COORDS['materials_block'][1], w_pt, h_pt)
     c.setFont('Helvetica', 8)
     mat_lateral = quebrar_limite(materials_raw, 42)
-    for i, ln in enumerate(mat_lateral[:20]): c.drawString(mx, my - (i * 10), ln)
+
+    # --- NOVO SISTEMA DE COLUNAS PARA MATERIAIS ---
+    max_linhas = 6  # Limite de linhas antes de pular para a coluna do lado
+    espaco_coluna = 150  # Espaçamento horizontal entre as colunas (em pontos)
+
+    # Renderiza até 24 itens organizados em até 4 colunas
+    for i, ln in enumerate(mat_lateral[:24]):
+        coluna = i // max_linhas
+        linha = i % max_linhas
+
+        x_atual = mx + (coluna * espaco_coluna)
+        y_atual = my - (linha * 10)
+
+        # Desenha a bolinha preta antes do texto
+        c.drawString(x_atual, y_atual, f"• {ln}")
+    # ----------------------------------------------
 
     l_pct, b_pct, r_pct, t_pct = COORDS['croqui_rect']
     dy = h_pt * ((t_pct + b_pct) / 2)
@@ -617,12 +632,23 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         cx = (lx + rx) / 2
         c.drawString(cx - (tw / 2), dy - 100, addr)
 
-    def draw_box(x, y, w, h, t, lines):
-        c.rect(x, y, w, h, fill=0)
+    def draw_box(x, y, w, h, t, lines, max_linhas=5):
+        largura_coluna = 120
+
+        num_colunas = max(1, (len(lines) + max_linhas - 1) // max_linhas)
+        largura_final = max(w, largura_coluna * num_colunas)
+
+        c.rect(x, y, largura_final, h, fill=0)
         c.setFont("Helvetica-Bold", 8)
         c.drawString(x + 5, y + h - 10, t)
         c.setFont("Helvetica", 8)
-        for i, l in enumerate(lines): c.drawString(x + 5, y + h - 20 - (i * 10), l)
+
+        for i, l in enumerate(lines):
+            col = i // max_linhas
+            row = i % max_linhas
+            c.drawString(x + 5 + (col * largura_coluna), y + h - 20 - (row * 10), f"• {l}")
+
+        return largura_final
 
     joined_materials = " ".join(materials_raw).lower()
     is_subt = "subterraneo" in joined_materials or "subterrâneo" in joined_materials
@@ -638,29 +664,54 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         c.circle(rx, dy, 4, fill=1)
         c.drawString(rx - 8, dy - 20, "Fim")
 
-        bw, off = 220, 35
-        mat_box = quebrar_limite(materials_raw, 42)
-        bh = 15 + 12 + (len(mat_box) * 10)
-        bx = mid - bw / 2
+        # Distância base calculada milimetricamente
+        off, bw_base = 28, 145
+        mat_box = quebrar_limite(materials_raw, 28)
+
+        max_linhas = 5
+        linhas_h = min(len(mat_box), max_linhas)
+        bh = 15 + 12 + (linhas_h * 10)
+
+        num_cols = max(1, (len(mat_box) + max_linhas - 1) // max_linhas)
+        largura_real = max(bw_base, 145 * num_cols)
+
+        bx = mid - largura_real / 2
         by = dy + off
-        draw_box(bx, by, bw, bh, "Tratativas", mat_box)
+
+        draw_box(bx, by, bw_base, bh, "Tratativas", mat_box, max_linhas)
         c.line(mid, dy, mid, by)
         c.drawString(mid - 4, by - 10, "↑")
     else:
         p1, p2 = dividir_tratativas(materials_raw)
-        p1_box = quebrar_limite(p1, 42)
-        p2_box = quebrar_limite(p2, 42)
+        p1_box = quebrar_limite(p1, 28)
+        p2_box = quebrar_limite(p2, 28)
 
-        off, bw = 180, 180
-        h1 = 15 + 12 + (len(p1_box) * 10)
-        bx1, by1 = lx - 20, dy + 30
-        draw_box(bx1, by1, bw, h1, "Tratativas E1", p1_box)
-        c.line(lx, dy, bx1 + bw / 2, by1)
+        # Base ancorada em 28 (fica exatamente acima do "VT 15m")
+        off = 25
+        bw_base = 145
+        max_linhas = 5
 
-        h2 = 15 + 12 + (len(p2_box) * 10)
-        bx2, by2 = rx - bw + 20, dy + 30
-        draw_box(bx2, by2, bw, h2, "Tratativas E2", p2_box)
-        c.line(rx, dy, bx2 + bw / 2, by2)
+        # --- Tratativas E1 ---
+        linhas_h1 = min(len(p1_box), max_linhas)
+        h1 = 15 + 12 + (linhas_h1 * 10)
+        bx1 = lx - 20
+        by1 = dy + off
+
+        largura_e1 = draw_box(bx1, by1, bw_base, h1, "Tratativas E1", p1_box, max_linhas)
+        c.line(lx, dy, bx1 + largura_e1 / 2, by1)
+
+        # --- Tratativas E2 ---
+        linhas_h2 = min(len(p2_box), max_linhas)
+        h2 = 15 + 12 + (linhas_h2 * 10)
+
+        num_cols_e2 = max(1, (len(p2_box) + max_linhas - 1) // max_linhas)
+        largura_e2 = max(bw_base, 145 * num_cols_e2)
+
+        bx2 = rx - largura_e2 + 20
+        by2 = dy + off
+
+        draw_box(bx2, by2, bw_base, h2, "Tratativas E2", p2_box, max_linhas)
+        c.line(rx, dy, bx2 + largura_e2 / 2, by2)
 
         step = (rx - lx) / len(pp_list)
         cx = lx
