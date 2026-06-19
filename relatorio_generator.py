@@ -133,6 +133,8 @@ async def search_telegram_message(ta_number):
 # --- FUNÇÕES DE BUSCA E FORMATAÇÃO ---
 def buscar_endereco_gps(lat, lon):
     rua, numero, cidade, estado = "", "", "", "SP"
+    plus_code = ""  # Variável para guardar o Plus Code caso precise
+
     if GOOGLE_API_KEY:
         try:
             gmaps = GoogleV3(api_key=GOOGLE_API_KEY)
@@ -140,15 +142,25 @@ def buscar_endereco_gps(lat, lon):
             if location:
                 best_res = location[0] if isinstance(location, list) else location
                 if hasattr(best_res, 'raw'):
+                    # 1. Tenta pescar o Plus Code direto da API do Google
+                    pc_data = best_res.raw.get('plus_code', {})
+                    plus_code = pc_data.get('compound_code', '') or pc_data.get('global_code', '')
+
+                    # 2. Varre os componentes buscando a Rua e Cidade
                     components = best_res.raw.get('address_components', [])
                     for comp in components:
                         if 'route' in comp['types']: rua = comp['long_name']
                         if 'street_number' in comp['types']: numero = comp['long_name']
                         if 'administrative_area_level_2' in comp['types']: cidade = comp['long_name']
                         if 'administrative_area_level_1' in comp['types']: estado = comp['short_name']
+
+                # Se achou a Rua, maravilha! Já retorna o endereço bonitinho.
                 if rua: return (f"{rua}, {numero}" if numero else f"{rua}, S/N"), f"{cidade} - {estado}"
         except:
             pass
+
+    # Se chegou aqui, o Google falhou ou a rodovia não tem nome de rua.
+    # Vamos tentar o plano B com o ArcGIS...
     try:
         geo_arc = ArcGIS(user_agent="sistema_croqui_v1")
         loc_arc = geo_arc.reverse(f"{lat}, {lon}", timeout=5)
@@ -162,14 +174,31 @@ def buscar_endereco_gps(lat, lon):
             if not cidade and len(parts) >= 3: cidade = parts[-3].strip()
     except:
         pass
+
+    # === HORA DA VERDADE: MONTANDO O RESULTADO FINAL ===
     end_parts = []
-    if rua: end_parts.append(rua)
-    if numero:
-        end_parts.append(f", {numero}")
-    elif rua:
-        end_parts.append(", S/N")
-    if not rua: return None, None
-    return "".join(end_parts), f"{cidade} - {estado}" if cidade else ""
+
+    if rua:
+        # Tem rua (achada pelo ArcGIS ou algo genérico)
+        end_parts.append(rua)
+        if numero:
+            end_parts.append(f", {numero}")
+        else:
+            end_parts.append(", S/N")
+        endereco_final = "".join(end_parts)
+    else:
+        # NÃO TEM RUA: ACIONA O PLUS CODE!
+        if plus_code:
+            # Pega apenas a primeira parte do Plus Code (antes do espaço), isolando o "27MC+26"
+            plus_code_curto = plus_code.split()[0]
+            endereco_final = f"Rodovia {plus_code_curto}"
+        else:
+            # Caso extremo de rodovia sem sinal ou erro na API
+            endereco_final = f"GPS: {lat[:8]}, {lon[:8]}"
+
+    localidade_final = f"{cidade} - {estado}" if cidade else ""
+
+    return endereco_final, localidade_final
 
 
 def formatar_texto(texto):
