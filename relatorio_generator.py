@@ -664,16 +664,21 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         c.circle(rx, dy, 4, fill=1)
         c.drawString(rx - 8, dy - 20, "Fim")
 
-        # Distância base calculada milimetricamente
         off, bw_base = 28, 145
-        mat_box = quebrar_limite(materials_raw, 28)
-
         max_linhas = 5
+
+        # --- LÓGICA INTELIGENTE DE LARGURA ---
+        # Tenta usar o limite grande (42)
+        mat_box = quebrar_limite(materials_raw, 42)
+        # Se passar de 5 linhas (vai criar 2ª coluna), refaz espremido (28)
+        if len(mat_box) > max_linhas:
+            mat_box = quebrar_limite(materials_raw, 28)
+
         linhas_h = min(len(mat_box), max_linhas)
         bh = 15 + 12 + (linhas_h * 10)
 
         num_cols = max(1, (len(mat_box) + max_linhas - 1) // max_linhas)
-        largura_real = max(bw_base, 145 * num_cols)
+        largura_real = max(bw_base, 95 * num_cols)  # Usando os 95 de largura_coluna que você definiu
 
         bx = mid - largura_real / 2
         by = dy + off
@@ -683,13 +688,20 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         c.drawString(mid - 4, by - 10, "↑")
     else:
         p1, p2 = dividir_tratativas(materials_raw)
-        p1_box = quebrar_limite(p1, 28)
-        p2_box = quebrar_limite(p2, 28)
 
-        # Base ancorada em 28 (fica exatamente acima do "VT 15m")
-        off = 25
-        bw_base = 145
         max_linhas = 5
+        off = 28
+        bw_base = 145
+
+        # --- LÓGICA INTELIGENTE E1 ---
+        p1_box = quebrar_limite(p1, 42)
+        if len(p1_box) > max_linhas:
+            p1_box = quebrar_limite(p1, 28)
+
+        # --- LÓGICA INTELIGENTE E2 ---
+        p2_box = quebrar_limite(p2, 42)
+        if len(p2_box) > max_linhas:
+            p2_box = quebrar_limite(p2, 28)
 
         # --- Tratativas E1 ---
         linhas_h1 = min(len(p1_box), max_linhas)
@@ -705,7 +717,7 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         h2 = 15 + 12 + (linhas_h2 * 10)
 
         num_cols_e2 = max(1, (len(p2_box) + max_linhas - 1) // max_linhas)
-        largura_e2 = max(bw_base, 145 * num_cols_e2)
+        largura_e2 = max(bw_base, 95 * num_cols_e2)  # Usando os 95 de largura_coluna
 
         bx2 = rx - largura_e2 + 20
         by2 = dy + off
