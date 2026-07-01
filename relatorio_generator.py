@@ -1,7 +1,6 @@
 import io
 import base64
-from flask import Flask, render_template_string, request, send_file, redirect, url_for, jsonify, session, Blueprint, \
-    flash
+from flask import Flask, render_template_string, request, send_file, redirect, url_for, jsonify, session, Blueprint, flash
 from reportlab.pdfgen import canvas
 from pdfrw import PdfReader, PdfWriter, PageMerge
 from pathlib import Path
@@ -64,7 +63,6 @@ DB_ALIASES = {
     "cleber": "cleiton irani rodrigues benfica"
 }
 
-
 # --- FUNÇÕES DE COMUNICAÇÃO FIREBASE ---
 def load_db():
     try:
@@ -79,14 +77,12 @@ def load_db():
         print(f"Erro na carga seletiva: {e}")
         return {"tecnicos": {}, "veiculos": {}, "locais_kml": {}, "croquis": {}}
 
-
 def save_db(data):
     try:
         ref = firebase_db.reference('/')
         ref.set(data)
     except Exception as e:
         print(f"Erro Save Firebase: {e}")
-
 
 # --- CONFIGURAÇÕES DE PDF ---
 COORDS = {
@@ -99,7 +95,6 @@ COORDS = {
 }
 EXEC_CONFIG = {'name_x': 0.47, 're_x': 0.65, 'start_y': 0.212, 'step_y': 0.028, 'max_rows': 6}
 FILTRO_LANCAMENTO = ["metr", "lancado", "lançado", "lancamento", "lançamento"]
-
 
 # --- FUNÇÃO TELEGRAM ---
 async def search_telegram_message(ta_number):
@@ -120,7 +115,6 @@ async def search_telegram_message(ta_number):
         print(f"Erro Telegram: {e}")
     return None
 
-
 # --- FUNÇÕES DE BUSCA E FORMATAÇÃO ---
 def buscar_endereco_gps(lat, lon):
     rua, numero, cidade, estado = "", "", "", "SP"
@@ -132,8 +126,7 @@ def buscar_endereco_gps(lat, lon):
             if location:
                 for loc in location:
                     if hasattr(loc, 'raw') and 'plus_code' in loc.raw:
-                        pc = loc.raw['plus_code'].get('compound_code', '') or loc.raw['plus_code'].get('global_code',
-                                                                                                       '')
+                        pc = loc.raw['plus_code'].get('compound_code', '') or loc.raw['plus_code'].get('global_code', '')
                         if pc:
                             plus_code_curto = pc.split()[0]
                             break
@@ -148,8 +141,7 @@ def buscar_endereco_gps(lat, lon):
                 if rua:
                     complemento = numero if numero else (plus_code_curto if plus_code_curto else "S/N")
                     return f"{rua}, {complemento}", f"{cidade} - {estado}"
-        except:
-            pass
+        except: pass
     try:
         geo_arc = ArcGIS(user_agent="sistema_croqui_v1")
         loc_arc = geo_arc.reverse(f"{lat}, {lon}", timeout=5)
@@ -164,8 +156,7 @@ def buscar_endereco_gps(lat, lon):
         if rua:
             complemento = numero if numero else (plus_code_curto if plus_code_curto else "S/N")
             return f"{rua}, {complemento}", f"{cidade} - {estado}"
-    except:
-        pass
+    except: pass
     try:
         geo_osm = Nominatim(user_agent="sistema_croqui_vivo_v1")
         loc_osm = geo_osm.reverse(f"{lat}, {lon}", timeout=5)
@@ -174,26 +165,18 @@ def buscar_endereco_gps(lat, lon):
             rua = addr.get('road', '') or addr.get('highway', '')
             numero = addr.get('house_number', '')
             if not cidade:
-                cidade = addr.get('city', '') or addr.get('town', '') or addr.get('village', '') or addr.get(
-                    'municipality', '')
+                cidade = addr.get('city', '') or addr.get('town', '') or addr.get('village', '') or addr.get('municipality', '')
         if rua:
-            if numero and any(char.isdigit() for char in numero):
-                complemento = numero
-            elif plus_code_curto:
-                complemento = plus_code_curto
-            else:
-                complemento = "S/N"
+            if numero and any(char.isdigit() for char in numero): complemento = numero
+            elif plus_code_curto: complemento = plus_code_curto
+            else: complemento = "S/N"
             return f"{rua}, {complemento}", f"{cidade} - {estado}"
-    except:
-        pass
+    except: pass
 
-    if plus_code_curto:
-        endereco_final = f"Rodovia {plus_code_curto}"
-    else:
-        endereco_final = f"GPS: {lat[:8]}, {lon[:8]}"
+    if plus_code_curto: endereco_final = f"Rodovia {plus_code_curto}"
+    else: endereco_final = f"GPS: {lat[:8]}, {lon[:8]}"
     localidade_final = f"{cidade} - {estado}" if cidade else ""
     return endereco_final, localidade_final
-
 
 def formatar_texto(texto):
     if not texto: return ""
@@ -208,9 +191,7 @@ def formatar_texto(texto):
     for p in placas: texto = texto.replace(p, p.upper())
     return texto
 
-
 def pct_to_pt(xpct, ypct, width_pt, height_pt): return xpct * width_pt, ypct * height_pt
-
 
 def organizar_tratativas(texto_bruto):
     texto = re.sub(r'\b(?:feito|realizado)\b', ' ', texto_bruto, flags=re.IGNORECASE)
@@ -218,7 +199,6 @@ def organizar_tratativas(texto_bruto):
     padrao_num = r'(?=\b(?:\d{1,4}\s*(?:fus[ãa]o|fus[õo]es|testes?|emendas?|ceo|caixas?|aberturas?|reaberturas?|ptro)|vt\s+sobressalente)\b)'
     texto = re.sub(padrao_num, '\n', texto, flags=re.IGNORECASE)
     return texto
-
 
 def extrair_tronco_seguro(text):
     texto_limpo = text.replace('*', '')
@@ -229,14 +209,13 @@ def extrair_tronco_seguro(text):
         m_limpo = re.sub(r'\s+', '', m.group(1)).upper()
         if m_limpo and m_limpo != "0": validos.append(m_limpo)
     if validos: return validos[-1]
-    padroes_fallback = [r"\bTR[\s:;\-#]*([Cc]?\s*#?\s*\d+)", r"\bCABO[\s:;\-#]*([Cc]?\s*#?\s*\d+)"]
+    padroes_fallback = [ r"\bTR[\s:;\-#]*([Cc]?\s*#?\s*\d+)", r"\bCABO[\s:;\-#]*([Cc]?\s*#?\s*\d+)" ]
     for padrao in padroes_fallback:
         for m in re.finditer(padrao, texto_limpo, re.IGNORECASE):
             m_limpo = re.sub(r'\s+', '', m.group(1)).upper()
             if m_limpo and m_limpo != "0": validos.append(m_limpo)
     if validos: return validos[-1]
     return ""
-
 
 def extrair_executantes_seguro(text, db):
     exec_list = []
@@ -253,18 +232,15 @@ def extrair_executantes_seguro(text, db):
         nome_limpo = re.sub(r"[\d\-\(\)\+]+", "", nome_bruto).strip().lower()
         if not nome_limpo: continue
         matched_name = None
-        if nome_limpo in db['tecnicos']:
-            matched_name = nome_limpo
+        if nome_limpo in db['tecnicos']: matched_name = nome_limpo
         else:
             for alias, db_name in DB_ALIASES.items():
                 if nome_limpo in alias or alias in nome_limpo:
-                    matched_name = db_name;
-                    break
+                    matched_name = db_name; break
             if not matched_name:
                 for db_name in db['tecnicos']:
                     if nome_limpo in db_name or db_name in nome_limpo:
-                        matched_name = db_name;
-                        break
+                        matched_name = db_name; break
         if matched_name and matched_name not in found_set:
             found_set.add(matched_name)
             exec_list.append({'name': matched_name.title(), 're': db['tecnicos'][matched_name].get('re', '')})
@@ -279,7 +255,6 @@ def extrair_executantes_seguro(text, db):
                 found_set.add(db_name)
                 exec_list.append({'name': db_name.title(), 're': db['tecnicos'][db_name].get('re', '')})
     return exec_list
-
 
 def extrair_siglas_seguro(text):
     texto_limpo = re.sub(r'http[s]?://\S+', '', text, flags=re.IGNORECASE)
@@ -299,11 +274,8 @@ def extrair_siglas_seguro(text):
             if m[0].upper() != "VIVO" and m[1].upper() != "COM": return m[0].upper(), m[1].upper()
     return "", ""
 
-
 def extract_fields_sigitm(text, db):
-    data = {key: '' for key in
-            ['ta', 'codigo_obra', 'causa', 'endereco', 'localidade', 'es', 'at', 'tronco', 'veiculo', 'data',
-             'supervisor', 'lat', 'lon']}
+    data = {key: '' for key in ['ta', 'codigo_obra', 'causa', 'endereco', 'localidade', 'es', 'at', 'tronco', 'veiculo', 'data', 'supervisor', 'lat', 'lon']}
     m_sgm = re.search(r"(?:SGM|OBRA)[\s:\-]*(\d{8,})", text, re.IGNORECASE)
     if m_sgm: data['codigo_obra'] = m_sgm.group(1)
     m_causa = re.search(r"Causa:\s*([^\n]+)", text, re.IGNORECASE)
@@ -326,42 +298,33 @@ def extract_fields_sigitm(text, db):
         if p_primeiro in db['veiculos']: data['veiculo'] = db['veiculos'][p_primeiro]
         info_tec = db['tecnicos'].get(p_primeiro, {})
         if not data['supervisor'] and info_tec.get('supervisor'): data['supervisor'] = info_tec['supervisor']
-    m_acao = re.search(r"Ação de Recuperação:\s*(.*?)(?=\nMaterial utilizado:|\nData:|\Z)", text,
-                       re.DOTALL | re.IGNORECASE)
+    m_acao = re.search(r"Ação de Recuperação:\s*(.*?)(?=\nMaterial utilizado:|\nData:|\Z)", text, re.DOTALL | re.IGNORECASE)
     raw_mat = m_acao.group(1).strip() if m_acao else ""
     return data, raw_mat
 
-
 def extract_fields(text, db):
-    data = {key: '' for key in
-            ['ta', 'codigo_obra', 'causa', 'endereco', 'localidade', 'es', 'at', 'tronco', 'veiculo', 'data',
-             'supervisor', 'lat', 'lon']}
+    data = {key: '' for key in ['ta', 'codigo_obra', 'causa', 'endereco', 'localidade', 'es', 'at', 'tronco', 'veiculo', 'data', 'supervisor', 'lat', 'lon']}
     text = text.replace('\r\n', '\n').strip()
     m_ta = re.search(r"(?:TA|T\.A\.?|TICKET)\s*[:\-]?\s*\*?(\d{8,})\*?", text, re.IGNORECASE)
-    if m_ta:
-        data['ta'] = m_ta.group(1)
+    if m_ta: data['ta'] = m_ta.group(1)
     else:
         m_loose_start = re.search(r"^\s*(\d{8,11})\b", text)
-        if m_loose_start:
-            data['ta'] = m_loose_start.group(1)
+        if m_loose_start: data['ta'] = m_loose_start.group(1)
         else:
             m_loose = re.search(r"\b([34]\d{8})\b", text)
             if m_loose: data['ta'] = m_loose.group(1)
     m_sgm = re.search(r"(?:SGM|Obra)[\s:\-]*(\d{8,})", text, re.IGNORECASE)
-    if m_sgm:
-        data['codigo_obra'] = m_sgm.group(1)
+    if m_sgm: data['codigo_obra'] = m_sgm.group(1)
     else:
         m_sgm_after_material = re.search(r"Material\s+utilizado:[\s\S]*?\b(\d{9,12})\b", text, re.IGNORECASE)
-        if m_sgm_after_material:
-            data['codigo_obra'] = m_sgm_after_material.group(1)
+        if m_sgm_after_material: data['codigo_obra'] = m_sgm_after_material.group(1)
         else:
             m_sgm_loose = re.search(r"\b(20[2-9]\d{7})\b", text)
             if m_sgm_loose: data['codigo_obra'] = m_sgm_loose.group(1)
     data['es'], data['at'] = extrair_siglas_seguro(text)
     data['tronco'] = extrair_tronco_seguro(text)
     m_dt_cria = re.search(r"(?:DATA|CRIACAO).*?(\d{2}/\d{2}/\d{4})", text, re.IGNORECASE)
-    if m_dt_cria:
-        data['data'] = m_dt_cria.group(1)
+    if m_dt_cria: data['data'] = m_dt_cria.group(1)
     elif not data['data']:
         m_prev = re.search(r"Previs[ãa]o.*?(\d{4}-\d{2}-\d{2})", text, re.IGNORECASE)
         if m_prev:
@@ -370,8 +333,7 @@ def extract_fields(text, db):
         else:
             m_simple = re.search(r"(\d{2}/\d{2}/\d{4})", text)
             if m_simple: data['data'] = m_simple.group(1)
-    patterns = [(r"(?:causa|motivo)\s*[:;\-]?\s*(.+)", 'causa'),
-                (r"(?:localidade|cidade)\s*[:;\-]?\s*(.+)", 'localidade'), (r"ve[ií]culo\s*[:;\-]?\s*(\S+)", 'veiculo')]
+    patterns = [(r"(?:causa|motivo)\s*[:;\-]?\s*(.+)", 'causa'), (r"(?:localidade|cidade)\s*[:;\-]?\s*(.+)", 'localidade'), (r"ve[ií]culo\s*[:;\-]?\s*(\S+)", 'veiculo')]
     for pat, key in patterns:
         if not data[key]:
             m = re.search(r"(?m)^.*?" + pat, text, re.IGNORECASE)
@@ -390,40 +352,33 @@ def extract_fields(text, db):
         info_tec = db['tecnicos'].get(p_primeiro, {})
         if info_tec.get('supervisor'): data['supervisor'] = info_tec['supervisor']
     m_gen = re.search(r"Ação de Recuperação:[\s\S]*?(?=\nMaterial|\nData|\Z|OBRA|SGM|Causa)", text, re.IGNORECASE)
-    if m_gen:
-        raw_mat = re.sub(r"Ação de Recuperação:\s*", "", m_gen.group(0), flags=re.IGNORECASE)
+    if m_gen: raw_mat = re.sub(r"Ação de Recuperação:\s*", "", m_gen.group(0), flags=re.IGNORECASE)
     else:
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         tmp = []
         for l in lines:
-            if not any(x in l.lower() for x in ['ta', 'data', 'lat', 'long', 'previsão', 'causa', 'obra']): tmp.append(
-                l)
+            if not any(x in l.lower() for x in ['ta', 'data', 'lat', 'long', 'previsão', 'causa', 'obra']): tmp.append(l)
         raw_mat = "\n".join(tmp)
     return data, raw_mat
-
 
 def detect_launch(material_lines):
     joined = " ".join(material_lines).lower()
     if "repuxad" in joined: return None
-    patterns = [r"(\d{1,4})\s*(?:m\b|mt|mts|metr[ao]s?)", r"(\d{1,4})\s*(?:lan[cç]ad[oa]|lan[cç]amento)",
-                r"(?:lan[cç]ad[oa]|lan[cç]amento)\s*(\d{1,4})"]
+    patterns = [r"(\d{1,4})\s*(?:m\b|mt|mts|metr[ao]s?)", r"(\d{1,4})\s*(?:lan[cç]ad[oa]|lan[cç]amento)", r"(?:lan[cç]ad[oa]|lan[cç]amento)\s*(\d{1,4})"]
     for p in patterns:
         m = re.search(p, joined)
         if m: return int(m.group(1))
     return None
-
 
 def detect_double_point(material_lines):
     joined = " ".join(material_lines).lower()
     if re.search(r"\b(?:02|2)\s*(?:reabertura|abertura|ceo|caixa|ctop|emenda)", joined): return True
     return False
 
-
 def extrair_vt_sobressalente(linhas_ou_texto):
     vts = []
     texto = " ".join(linhas_ou_texto) if isinstance(linhas_ou_texto, list) else str(linhas_ou_texto)
-    padroes_vt = [r'vt[\s\S]{0,15}sobress?alente[\s\S]{0,20}?(\d+)\s*(?:m\b|mt|mts|metros)',
-                  r'(\d+)\s*(?:m\b|mt|mts|metros)[\s\S]{0,20}vt[\s\S]{0,15}sobress?alente']
+    padroes_vt = [ r'vt[\s\S]{0,15}sobress?alente[\s\S]{0,20}?(\d+)\s*(?:m\b|mt|mts|metros)', r'(\d+)\s*(?:m\b|mt|mts|metros)[\s\S]{0,20}vt[\s\S]{0,15}sobress?alente' ]
     for padrao in padroes_vt:
         matches = re.finditer(padrao, texto, re.IGNORECASE)
         for m in matches:
@@ -436,7 +391,6 @@ def extrair_vt_sobressalente(linhas_ou_texto):
             if not any(v['len'] == vt_len and v['xc'] == xc_idx for v in vts): vts.append({'len': vt_len, 'xc': xc_idx})
     return vts
 
-
 def generate_pps(total_length, vt_each=15, extra_vt=0):
     usable = total_length - (2 * vt_each) - extra_vt
     if usable <= 0: return []
@@ -446,7 +400,6 @@ def generate_pps(total_length, vt_each=15, extra_vt=0):
     spans = [base_span] * num_spans
     for i in range(resto): spans[i] += 1
     return spans
-
 
 def dividir_tratativas(material_lines):
     divs = ["fus", "fusão", "fusões", "fusao", "tubo", "loose", "teste", "otdr"]
@@ -460,17 +413,14 @@ def dividir_tratativas(material_lines):
         itens.append({"qtd": int(m.group(1)), "nome": m.group(2).strip(), "orig": t})
     esps_unit = [i for i in itens if i["qtd"] == 1 and any(k in i["nome"] for k in esps)]
     if len(esps_unit) == 2:
-        p1.append(esps_unit[0]["orig"]);
-        p2.append(esps_unit[1]["orig"])
+        p1.append(esps_unit[0]["orig"]); p2.append(esps_unit[1]["orig"])
         rest = [i for i in itens if i not in esps_unit]
-    else:
-        rest = itens.copy()
+    else: rest = itens.copy()
     for i in rest:
         qtd, nome, orig = i["qtd"], i["nome"], i["orig"]
         if any(f in nome for f in FILTRO_LANCAMENTO): p1.append(orig); continue
         if any(k in nome for k in esps) or any(k in nome for k in divs):
-            if qtd == 1 and any(k in nome for k in esps):
-                p1.append(orig)
+            if qtd == 1 and any(k in nome for k in esps): p1.append(orig)
             else:
                 md, rs = qtd // 2, qtd - (qtd // 2)
                 if md > 0: p1.append(f"{md} {nome}")
@@ -479,18 +429,16 @@ def dividir_tratativas(material_lines):
         p1.append(orig)
     return p1, p2
 
-
 def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     if vts_extra is None: vts_extra = []
     packet = io.BytesIO()
-    if not os.path.exists(TEMPLATE_PDF):
-        w_pt, h_pt = 595.27, 841.89
+    if not os.path.exists(TEMPLATE_PDF): w_pt, h_pt = 595.27, 841.89
     else:
         tpl = PdfReader(TEMPLATE_PDF)
         mb = tpl.pages[0].MediaBox
         w_pt, h_pt = float(mb[2]) - float(mb[0]), float(mb[3]) - float(mb[1])
     c = canvas.Canvas(packet, pagesize=(w_pt, h_pt))
-
+    
     def put_xy(key, text, size=9, manual=None):
         if not text: return
         xp, yp = manual if manual else COORDS.get(key, (0, 0))
@@ -498,35 +446,30 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         x, y = pct_to_pt(xp, yp, w_pt, h_pt)
         c.setFont("Helvetica", size)
         for idx, ln in enumerate(str(text).split('\n')): c.drawString(x, y - (idx * (size + 2)), ln)
-
+        
     for k, v in parsed.items():
         if k != 'executantes_parsed': put_xy(k, v)
-
-    # ---
+        
     for i, item in enumerate(parsed.get('executantes_parsed', [])):
         if i >= EXEC_CONFIG['max_rows']: break
         cy = EXEC_CONFIG['start_y'] - (i * EXEC_CONFIG['step_y'])
-
+        
         nome_completo = item['name']
         partes = nome_completo.split()
-
-        # Se o nome tiver mais de 2 palavras (ex: Alessandro Ferreira De Morais)
-        # Ele pega só o primeiro (Alessandro) e o último (Morais)
+        
         if len(partes) > 2:
             nome_curto = f"{partes[0]} {partes[-1]}"
         else:
             nome_curto = nome_completo
-
+            
         put_xy(f"nm_{i}", nome_curto, 9, (EXEC_CONFIG['name_x'], cy))
         if item.get('re'): put_xy(f"re_{i}", item['re'], 9, (EXEC_CONFIG['re_x'], cy))
-
-    # ------------------------------------------------------------------------
 
     def quebrar_limite(linhas, limite=42):
         nova_lista = []
         for linha in linhas: nova_lista.extend(textwrap.wrap(linha, width=limite))
         return nova_lista
-
+        
     mx, my = pct_to_pt(COORDS['materials_block'][0], COORDS['materials_block'][1], w_pt, h_pt)
     c.setFont('Helvetica', 8)
     mat_lateral = quebrar_limite(materials_raw, 42)
@@ -534,41 +477,36 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     for i, ln in enumerate(mat_lateral[:24]):
         coluna, linha = i // max_linhas, i % max_linhas
         c.drawString(mx + (coluna * espaco_coluna), my - (linha * 10), f"• {ln}")
-
+        
     l_pct, b_pct, r_pct, t_pct = COORDS['croqui_rect']
     dy, lx, rx = h_pt * ((t_pct + b_pct) / 2), w_pt * (l_pct + 0.05), w_pt * (r_pct - 0.05)
-    c.setLineWidth(2);
-    c.setDash(4, 2);
-    c.line(lx, dy, rx, dy);
-    c.setDash([])
-
+    c.setLineWidth(2); c.setDash(4, 2); c.line(lx, dy, rx, dy); c.setDash([])
+    
     if parsed.get('endereco'):
         c.setFont('Helvetica-Bold', 10)
         tw = c.stringWidth(parsed['endereco'], 'Helvetica-Bold', 10)
         c.drawString(((lx + rx) / 2) - (tw / 2), dy - 100, parsed['endereco'])
-
+        
     def draw_box(x, y, w, h, t, lines, max_linhas=5):
         largura_coluna = 120
         num_colunas = max(1, (len(lines) + max_linhas - 1) // max_linhas)
         largura_final = max(w, largura_coluna * num_colunas)
         c.rect(x, y, largura_final, h, fill=0)
-        c.setFont("Helvetica-Bold", 8);
-        c.drawString(x + 5, y + h - 10, t)
+        c.setFont("Helvetica-Bold", 8); c.drawString(x + 5, y + h - 10, t)
         c.setFont("Helvetica", 8)
         for i, l in enumerate(lines):
             col, row = i // max_linhas, i % max_linhas
             c.drawString(x + 5 + (col * largura_coluna), y + h - 20 - (row * 10), f"• {l}")
         return largura_final
-
+        
     joined_materials = " ".join(materials_raw).lower()
     is_subt = "subterraneo" in joined_materials or "subterrâneo" in joined_materials
     pfx = "CS" if is_subt else "XC"
-
+    
     if len(pp_list) == 0:
         mid = lx + (rx - lx) / 2
         for pt, txt, x_off in [(lx, "Início", -12), (mid, pfx, -8), (rx, "Fim", -8)]:
-            c.circle(pt, dy, 4, fill=1);
-            c.drawString(pt + x_off, dy - 20, txt)
+            c.circle(pt, dy, 4, fill=1); c.drawString(pt + x_off, dy - 20, txt)
         off, bw_base, max_linhas = 28, 145, 5
         mat_box = quebrar_limite(materials_raw, 42)
         if len(mat_box) > max_linhas: mat_box = quebrar_limite(materials_raw, 28)
@@ -578,26 +516,25 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         largura_real = max(bw_base, 95 * num_cols)
         bx, by = mid - largura_real / 2, dy + off
         draw_box(bx, by, bw_base, bh, "Tratativas", mat_box, max_linhas)
-        c.line(mid, dy, mid, by);
-        c.drawString(mid - 4, by - 10, "↑")
+        c.line(mid, dy, mid, by); c.drawString(mid - 4, by - 10, "↑")
     else:
         p1, p2 = dividir_tratativas(materials_raw)
         max_linhas, off, bw_base = 5, 28, 145
         p1_box = quebrar_limite(p1, 28) if len(quebrar_limite(p1, 42)) > max_linhas else quebrar_limite(p1, 42)
         p2_box = quebrar_limite(p2, 28) if len(quebrar_limite(p2, 42)) > max_linhas else quebrar_limite(p2, 42)
-
+        
         linhas_h1 = min(len(p1_box), max_linhas)
         bx1, by1 = lx - 20, dy + off
         largura_e1 = draw_box(bx1, by1, bw_base, 15 + 12 + (linhas_h1 * 10), "Tratativas E1", p1_box, max_linhas)
         c.line(lx, dy, bx1 + largura_e1 / 2, by1)
-
+        
         linhas_h2 = min(len(p2_box), max_linhas)
         num_cols_e2 = max(1, (len(p2_box) + max_linhas - 1) // max_linhas)
         largura_e2 = max(bw_base, 95 * num_cols_e2)
         bx2, by2 = rx - largura_e2 + 20, dy + off
         draw_box(bx2, by2, bw_base, 15 + 12 + (linhas_h2 * 10), "Tratativas E2", p2_box, max_linhas)
         c.line(rx, dy, bx2 + largura_e2 / 2, by2)
-
+        
         step, cx, has_cb = (rx - lx) / len(pp_list), lx, sum(pp_list) > 0
         c.circle(cx, dy, 4, fill=1)
         if has_cb: c.drawString(cx - 10, dy + 15, "VT 15m")
@@ -609,18 +546,16 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
             if i == len(pp_list) - 1:
                 c.drawString(nx - 10, dy - 20, f"{pfx} Final")
                 if has_cb: c.drawString(nx - 10, dy + 15, "VT 15m")
-            else:
-                c.drawString(nx - 8, dy - 20, pfx)
+            else: c.drawString(nx - 8, dy - 20, pfx)
             cx = nx
-
+            
     if vts_extra:
         for vt in vts_extra:
             xc_idx, vt_len = vt['xc'], vt['len']
             if len(pp_list) > 0:
                 xc_idx = min(xc_idx, len(pp_list))
                 pole_x = lx + (xc_idx * ((rx - lx) / len(pp_list)))
-            else:
-                pole_x = lx + (rx - lx) / 2
+            else: pole_x = lx + (rx - lx) / 2
             box_w, box_h = 100, 18
             box_x, box_y = pole_x - (box_w / 2), dy - 60
             c.rect(box_x, box_y, box_w, box_h, fill=0)
@@ -628,29 +563,21 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
             texto_vt = f"VT Sobressal. {vt_len}m"
             tw = c.stringWidth(texto_vt, "Helvetica-Bold", 8)
             c.drawString(box_x + (box_w - tw) / 2, box_y + 6, texto_vt)
-            c.setDash(2, 2);
-            c.line(pole_x, dy, pole_x, box_y + box_h);
-            c.setDash([])
-
-    c.showPage();
-    c.save();
-    packet.seek(0)
+            c.setDash(2, 2); c.line(pole_x, dy, pole_x, box_y + box_h); c.setDash([])
+            
+    c.showPage(); c.save(); packet.seek(0)
     return packet
 
 def merge_overlay(overlay_stream):
     out_stream = io.BytesIO()
     if not os.path.exists(TEMPLATE_PDF):
-        out_stream.write(overlay_stream.read());
-        out_stream.seek(0);
-        return out_stream
+        out_stream.write(overlay_stream.read()); out_stream.seek(0); return out_stream
     overlay = PdfReader(fdata=overlay_stream.read())
     template = PdfReader(TEMPLATE_PDF)
     if len(template.pages) > 0 and len(overlay.pages) > 0:
         PageMerge(template.pages[0]).add(overlay.pages[0]).render()
-    PdfWriter(out_stream, trailer=template).write();
-    out_stream.seek(0)
+    PdfWriter(out_stream, trailer=template).write(); out_stream.seek(0)
     return out_stream
-
 
 # ==========================================
 # FUNÇÕES E BLUEPRINT KML
@@ -659,7 +586,6 @@ def remove_namespace(tree):
     for elem in tree.iter():
         if '}' in elem.tag: elem.tag = elem.tag.split('}', 1)[1]
     return tree
-
 
 def read_kml(file_path):
     if not os.path.exists(file_path): return []
@@ -672,10 +598,8 @@ def read_kml(file_path):
             try:
                 lon, lat, *_ = coords_tag.text.strip().split(",")
                 places.append({"name": place_name, "lat": lat.strip(), "lon": lon.strip()})
-            except ValueError:
-                pass
+            except ValueError: pass
     return sorted(places, key=lambda p: p["name"].lower())
-
 
 def add_placemark(file_path, name, lat, lon):
     tree = remove_namespace(ET.parse(file_path))
@@ -684,73 +608,52 @@ def add_placemark(file_path, name, lat, lon):
     pm = ET.Element("Placemark")
     ET.SubElement(pm, "name").text = name
     ET.SubElement(ET.SubElement(pm, "Point"), "coordinates").text = f"{lon},{lat},0"
-    root.append(pm);
-    tree.write(file_path, encoding='utf-8', xml_declaration=True)
+    root.append(pm); tree.write(file_path, encoding='utf-8', xml_declaration=True)
     return True
 
-
 def get_coordinates_from_link(link):
-    match = re.search(r"https:\/\/(?:www\.)?google\.com\/maps\/(?:[\w\-]+\/\@|\?q=|\?ll=)(-?\d+\.\d+),(-?\d+\.\d+)",
-                      link)
+    match = re.search(r"https:\/\/(?:www\.)?google\.com\/maps\/(?:[\w\-]+\/\@|\?q=|\?ll=)(-?\d+\.\d+),(-?\d+\.\d+)", link)
     return (match.group(1), match.group(2)) if match else (None, None)
 
-
 mapa_bp = Blueprint('mapa', __name__, url_prefix='/mapa')
-
 
 def clean_firebase_key(name):
     return str(name).replace('.', '_').replace('#', '_').replace('$', '_').replace('[', '_').replace(']', '_')
 
-
 @mapa_bp.route('/')
 def index_mapa():
     places_kml = read_kml(KML_PATH)
-    db, locais_nuvem, places_nuvem, deletados, nomes_na_nuvem = load_db(), load_db().get('locais_kml',
-                                                                                         {}), [], set(), set()
+    db, locais_nuvem, places_nuvem, deletados, nomes_na_nuvem = load_db(), load_db().get('locais_kml', {}), [], set(), set()
     for safe_key, data in locais_nuvem.items():
         if isinstance(data, dict):
             nome_real = data.get('name', safe_key)
-            if data.get('deleted'):
-                deletados.add(nome_real)
-            else:
-                nomes_na_nuvem.add(nome_real); places_nuvem.append(
-                    {"name": nome_real, "lat": data.get('lat', ''), "lon": data.get('lon', '')})
+            if data.get('deleted'): deletados.add(nome_real)
+            else: nomes_na_nuvem.add(nome_real); places_nuvem.append({"name": nome_real, "lat": data.get('lat', ''), "lon": data.get('lon', '')})
     todos_places = places_nuvem.copy()
     for p in places_kml:
         if p['name'] not in nomes_na_nuvem and p['name'] not in deletados: todos_places.append(p)
     return render_template_string(KML_HTML, places=sorted(todos_places, key=lambda p: str(p.get("name", "")).lower()))
 
-
 @mapa_bp.route('/add', methods=['POST'])
 def add():
-    name, lat, lon = request.form['name'].upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon',
-                                                                                                                 '').strip()
+    name, lat, lon = request.form['name'].upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon', '').strip()
     maps_link = request.form.get('mapsLink')
     if maps_link:
         lat, lon = get_coordinates_from_link(maps_link)
-        if not lat or not lon: flash("Link do Google Maps inválido.", "error"); return redirect(
-            url_for('mapa.index_mapa'))
-    if not lat or not lon: flash("Preencha as coordenadas ou cole um link do Maps.", "error"); return redirect(
-        url_for('mapa.index_mapa'))
+        if not lat or not lon: flash("Link do Google Maps inválido.", "error"); return redirect(url_for('mapa.index_mapa'))
+    if not lat or not lon: flash("Preencha as coordenadas ou cole um link do Maps.", "error"); return redirect(url_for('mapa.index_mapa'))
     safe_name = clean_firebase_key(name)
     db = load_db()
     if safe_name in db['locais_kml'] and not db['locais_kml'][safe_name].get('deleted'):
-        flash("Já existe um local com esse nome.", "error");
-        return redirect(url_for('mapa.index_mapa'))
+        flash("Já existe um local com esse nome.", "error"); return redirect(url_for('mapa.index_mapa'))
     if any(p['name'] == name for p in read_kml(KML_PATH)) and safe_name not in db['locais_kml']:
-        flash("Já existe um local com esse nome no arquivo original.", "error");
-        return redirect(url_for('mapa.index_mapa'))
+        flash("Já existe um local com esse nome no arquivo original.", "error"); return redirect(url_for('mapa.index_mapa'))
     db['locais_kml'][safe_name] = {'name': name, 'lat': lat, 'lon': lon}
-    save_db(db);
-    flash("Local adicionado com sucesso!", "success");
-    return redirect(url_for('mapa.index_mapa'))
-
+    save_db(db); flash("Local adicionado com sucesso!", "success"); return redirect(url_for('mapa.index_mapa'))
 
 @mapa_bp.route('/edit', methods=['POST'])
 def edit():
-    orig_name, new_name, lat, lon = request.form.get('original_name', '').strip(), request.form.get('name',
-                                                                                                    '').upper().strip(), request.form.get(
-        'lat', '').strip(), request.form.get('lon', '').strip()
+    orig_name, new_name, lat, lon = request.form.get('original_name', '').strip(), request.form.get('name', '').upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon', '').strip()
     maps_link = request.form.get('mapsLink')
     if maps_link:
         parsed_lat, parsed_lon = get_coordinates_from_link(maps_link)
@@ -758,20 +661,14 @@ def edit():
     safe_orig, safe_new, db = clean_firebase_key(orig_name), clean_firebase_key(new_name), load_db()
     if safe_orig != safe_new: db['locais_kml'][safe_orig] = {'deleted': True, 'name': orig_name}
     db['locais_kml'][safe_new] = {'name': new_name, 'lat': lat, 'lon': lon}
-    save_db(db);
-    flash("Local atualizado com sucesso!", "success");
-    return redirect(url_for('mapa.index_mapa'))
-
+    save_db(db); flash("Local atualizado com sucesso!", "success"); return redirect(url_for('mapa.index_mapa'))
 
 @mapa_bp.route('/delete', methods=['POST'])
 def delete():
     name = request.form.get('name', '').strip()
     db = load_db()
     db['locais_kml'][clean_firebase_key(name)] = {'deleted': True, 'name': name}
-    save_db(db);
-    flash(f"Local {name} apagado com sucesso!", "success");
-    return redirect(url_for('mapa.index_mapa'))
-
+    save_db(db); flash(f"Local {name} apagado com sucesso!", "success"); return redirect(url_for('mapa.index_mapa'))
 
 app.register_blueprint(mapa_bp)
 
@@ -1152,7 +1049,6 @@ KML_HTML = """<!DOCTYPE html>
 </script>
 </body></html>"""
 
-
 # ==========================================
 # ROTAS INVISÍVEIS PARA O ROBÔ DO CAPTCHA
 # ==========================================
@@ -1162,7 +1058,6 @@ def disparar_robo_login(user, pwd):
     loop.run_until_complete(gerar_sessao_interativa(user, pwd))
     loop.close()
 
-
 @app.route('/api/iniciar_login', methods=['POST'])
 def api_iniciar_login():
     user, pwd = request.form.get('user'), request.form.get('pwd')
@@ -1170,7 +1065,6 @@ def api_iniciar_login():
         if os.path.exists(f): os.remove(f)
     threading.Thread(target=disparar_robo_login, args=(user, pwd)).start()
     return jsonify({"status": "ok"})
-
 
 @app.route('/api/status_login')
 def api_status_login():
@@ -1181,38 +1075,30 @@ def api_status_login():
         return jsonify({"status": "esperando_captcha", "img": "/static/captcha.png"})
     return jsonify({"status": "carregando"})
 
-
 @app.route('/api/enviar_captcha', methods=['POST'])
 def api_enviar_captcha():
     with open('static/captcha_answer.txt', 'w') as f: f.write(request.form.get('captcha'))
     return jsonify({"status": "enviado"})
-
 
 # --- ROTAS DE ADMINISTRAÇÃO E COMUNICAÇÃO FIREBASE ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         if request.form.get('senha') == ADMIN_PASSWORD:
-            session['admin_logged_in'] = True;
-            return redirect(url_for('admin'))
-        else:
-            return render_template_string(LOGIN_HTML, erro=True)
+            session['admin_logged_in'] = True; return redirect(url_for('admin'))
+        else: return render_template_string(LOGIN_HTML, erro=True)
     return render_template_string(LOGIN_HTML, erro=False)
-
 
 @app.route('/logout')
 def logout(): session.pop('admin_logged_in', None); return redirect(url_for('index'))
-
 
 @app.route('/api/update_or_ot', methods=['POST'])
 def api_update_or_ot():
     db, ta, or_ot = load_db(), request.form.get('ta'), request.form.get('or_ot', '')
     if ta and 'croquis' in db and ta in db['croquis']:
         db['croquis'][ta]['parsed']['or_ot'] = or_ot
-        save_db(db);
-        return jsonify({"status": "success"})
+        save_db(db); return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
-
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -1223,9 +1109,7 @@ def admin():
         if action == 'add':
             nome = request.form.get('nome', '').strip().lower()
             if nome:
-                db['tecnicos'][nome] = {'re': request.form.get('re', '').strip(),
-                                        'area': request.form.get('area', '').strip(),
-                                        'supervisor': request.form.get('supervisor', '').strip().title()}
+                db['tecnicos'][nome] = {'re': request.form.get('re', '').strip(), 'area': request.form.get('area', '').strip(), 'supervisor': request.form.get('supervisor', '').strip().title()}
                 placa = request.form.get('placa', '').strip().upper()
                 if placa: db['veiculos'][nome] = placa
                 save_db(db)
@@ -1235,14 +1119,10 @@ def admin():
                 if new_nome != orig_nome:
                     del db['tecnicos'][orig_nome]
                     if orig_nome in db['veiculos']: del db['veiculos'][orig_nome]
-                db['tecnicos'][new_nome] = {'re': request.form.get('re', '').strip(),
-                                            'area': request.form.get('area', '').strip(),
-                                            'supervisor': request.form.get('supervisor', '').strip().title()}
+                db['tecnicos'][new_nome] = {'re': request.form.get('re', '').strip(), 'area': request.form.get('area', '').strip(), 'supervisor': request.form.get('supervisor', '').strip().title()}
                 placa = request.form.get('placa', '').strip().upper()
-                if placa:
-                    db['veiculos'][new_nome] = placa
-                elif new_nome in db['veiculos']:
-                    del db['veiculos'][new_nome]
+                if placa: db['veiculos'][new_nome] = placa
+                elif new_nome in db['veiculos']: del db['veiculos'][new_nome]
                 save_db(db)
         elif action == 'delete':
             nome = request.form.get('nome')
@@ -1251,7 +1131,6 @@ def admin():
             save_db(db)
         return redirect(url_for('admin'))
     return render_template_string(ADMIN_HTML, tecnicos=dict(sorted(db['tecnicos'].items())), veiculos=db['veiculos'])
-
 
 @app.route('/relatorios', methods=['GET', 'POST'])
 def relatorios():
@@ -1263,36 +1142,26 @@ def relatorios():
         return redirect(url_for('relatorios'))
     return render_template_string(RELATORIOS_HTML, croquis=dict(sorted(db.get('croquis', {}).items(), reverse=True)))
 
-
 # --- ROTAS PRINCIPAIS ---
 @app.route('/')
 def index(): return render_template_string(PASTE_HTML)
 
-
 @app.route('/tecnicos')
-def tecnicos(): return json.dumps(
-    [{'name': k, 're': v.get('re', ''), 'area': v.get('area', ''), 'supervisor': v.get('supervisor', '')} for k, v in
-     load_db()['tecnicos'].items()])
-
+def tecnicos(): return json.dumps([{'name': k, 're': v.get('re', ''), 'area': v.get('area', ''), 'supervisor': v.get('supervisor', '')} for k, v in load_db()['tecnicos'].items()])
 
 @app.route('/form')
-def form_vazio(): return render_template_string(FORM_HTML, data={}, itens_texto="", executantes_list=[],
-                                                veiculos_map=load_db()['veiculos'])
-
+def form_vazio(): return render_template_string(FORM_HTML, data={}, itens_texto="", executantes_list=[], veiculos_map=load_db()['veiculos'])
 
 @app.route('/preencher', methods=['POST'])
 def preencher():
     db = load_db()
     raw_text = request.form.get('raw_text', '').strip()
 
-    # 1. VERIFICA SE JÁ EXISTE NA NUVEM (CORRIGIDO BUG DO SUMIÇO: 'in db.get' invés de apenas isdigit)
     if raw_text in db.get('croquis', {}):
         print(f"♻️ Carregando dados da TA {raw_text} da Nuvem para edição!")
         dados_salvos = db['croquis'][raw_text]
         parsed_data = dados_salvos['parsed']
         raw_mat = dados_salvos['itens_raw']
-
-    # 2. SE NÃO EXISTE, BUSCA AUTOMATICAMENTE NO SIGITM
     elif raw_text.isdigit() and len(raw_text) >= 8:
         print(f"🚀 Iniciando busca automática no SIGITM para a TA: {raw_text}")
         try:
@@ -1307,11 +1176,7 @@ def preencher():
                 flash("Sessão expirada ou erro no SIGITM. Cole o encerramento manualmente.", "error")
                 return redirect(url_for('index'))
         except Exception as e:
-            print(f"Erro durante a execução: {e}");
-            flash("Erro ao conectar ao SIGITM.", "error");
-            return redirect(url_for('index'))
-
-    # 3. MODO TRADICIONAL (COLANDO TEXTO)
+            print(f"Erro durante a execução: {e}"); flash("Erro ao conectar ao SIGITM.", "error"); return redirect(url_for('index'))
     else:
         parsed_data, raw_mat = extract_fields(raw_text, db)
         ta_encontrada = parsed_data.get('ta')
@@ -1324,35 +1189,44 @@ def preencher():
                 if texto_telegram:
                     parsed_telegram, _ = extract_fields(texto_telegram, db)
                     for campo in ['es', 'at', 'tronco', 'data']:
-                        if not parsed_data[campo] and parsed_telegram[campo]: parsed_data[campo] = parsed_telegram[
-                            campo]
-            except Exception as e:
-                print(f"Erro Telegram: {e}")
+                        if not parsed_data[campo] and parsed_telegram[campo]: parsed_data[campo] = parsed_telegram[campo]
+            except Exception as e: print(f"Erro Telegram: {e}")
 
     raw_mat = organizar_tratativas(raw_mat)
     material_lines = [formatar_texto(l.strip()) for l in raw_mat.splitlines() if l.strip()]
     exec_names = [e['name'].title() for e in parsed_data.get('executantes_parsed', [])]
     itens_texto = "\n".join(material_lines)
 
-    return render_template_string(FORM_HTML, data=parsed_data, itens_texto=itens_texto, executantes_list=exec_names,
-                                  veiculos_map=db['veiculos'])
-
+    return render_template_string(FORM_HTML, data=parsed_data, itens_texto=itens_texto, executantes_list=exec_names, veiculos_map=db['veiculos'])
 
 @app.route('/generate', methods=['POST'])
 def generate():
     db = load_db()
     execs_string = request.form.get('executantes', '')
     exec_list = []
-
-    # CORRIGIDO BUG DOS NOMES: O NOME É SALVO INTEIRO, GARANTINDO O "RE"
+    
+    # 1. Pega a TA atual para criarmos o código
+    ta_atual = request.form.get('ta', '')
+    codigo = re.sub(r'[^\w\-]', '', ta_atual or f"doc_{random.randint(1000, 9999)}")
+    
+    # 2. Resgata os REs antigos caso o técnico não esteja cadastrado no banco do Admin
+    executantes_antigos = {}
+    if codigo in db.get('croquis', {}):
+        for e in db['croquis'][codigo].get('parsed', {}).get('executantes_parsed', []):
+            executantes_antigos[e['name'].lower()] = e.get('re', '')
+    
+    # 3. Monta a lista de técnicos com a "memória" ativada
     if execs_string:
         for nome in execs_string.split(','):
             clean = nome.strip().lower()
+            re_code = ''
+            
             if clean in db['tecnicos']:
                 re_code = db['tecnicos'][clean].get('re', '')
-                exec_list.append({'name': nome.strip().title(), 're': re_code})
-            else:
-                exec_list.append({'name': nome.strip().title(), 're': ''})
+            elif clean in executantes_antigos:  # Se não achou no BD, pega do croqui antigo!
+                re_code = executantes_antigos[clean]
+                
+            exec_list.append({'name': nome.strip().title(), 're': re_code})
 
     parsed = {
         'or_ot': request.form.get('or_ot', ''), 'ta': request.form.get('ta', ''),
@@ -1365,14 +1239,12 @@ def generate():
     }
 
     itens_raw = organizar_tratativas(request.form.get('itens', ''))
-
-    codigo = re.sub(r'[^\w\-]', '', parsed.get('ta') or f"doc_{random.randint(1000, 9999)}")
+    
     db['croquis'][codigo] = {'parsed': parsed, 'itens_raw': itens_raw}
     save_db(db)
-
-    # MAGIA ACONTECE AQUI: Redireciona o celular para a rota com '.pdf' na URL
+    
+    # Redireciona o celular para a rota com '.pdf' na URL
     return redirect(url_for('visualizar_croqui', ta=codigo))
-
 
 # === NOVA ROTA MÁGICA PARA RESOLVER O PROBLEMA DO ANDROID ===
 @app.route('/croqui/<ta>.pdf')
@@ -1389,18 +1261,16 @@ def visualizar_croqui(ta):
         if ',' in line:
             for p in line.split(','):
                 if p.strip(): final_materials.append(formatar_texto(p.strip()))
-        else:
-            final_materials.append(line)
+        else: final_materials.append(line)
     material_lines = final_materials
 
     vts_extra = extrair_vt_sobressalente(material_lines)
     total_extra_vt = sum(v['len'] for v in vts_extra)
     total_len = detect_launch(material_lines)
-
+    
     is_double_point = False
     if total_len is None and detect_double_point(material_lines):
-        is_double_point = True;
-        total_len = 0
+        is_double_point = True; total_len = 0
 
     pp_list = generate_pps(total_len, extra_vt=total_extra_vt) if total_len is not None and total_len > 0 else (
         [0, 0, 0, 0] if is_double_point else [])
@@ -1413,7 +1283,7 @@ def visualizar_croqui(ta):
     return send_file(
         final_pdf_stream,
         download_name=f"{ta}.pdf",
-        as_attachment=False,
+        as_attachment=False, 
         mimetype='application/pdf'
     )
 
@@ -1427,20 +1297,15 @@ def api_upload_anexo():
     if ta and 'croquis' in db and ta in db['croquis']:
         if 'anexos' not in db['croquis'][ta]: db['croquis'][ta]['anexos'] = []
         for f in files:
-            if f and f.filename.lower().endswith('.pdf'): db['croquis'][ta]['anexos'].append(
-                base64.b64encode(f.read()).decode('utf-8'))
-        save_db(db);
-        return jsonify({"status": "success"})
+            if f and f.filename.lower().endswith('.pdf'): db['croquis'][ta]['anexos'].append(base64.b64encode(f.read()).decode('utf-8'))
+        save_db(db); return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
-
 
 @app.route('/api/limpar_anexos', methods=['POST'])
 def api_limpar_anexos():
     ta, db = request.form.get('ta'), load_db()
-    if ta and 'croquis' in db and ta in db['croquis']: db['croquis'][ta]['anexos'] = []; save_db(db); return jsonify(
-        {"status": "success"})
+    if ta and 'croquis' in db and ta in db['croquis']: db['croquis'][ta]['anexos'] = []; save_db(db); return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
-
 
 @app.route('/gerar_completo/<ta>')
 def gerar_completo(ta):
@@ -1454,8 +1319,7 @@ def gerar_completo(ta):
         if ',' in line:
             for p in line.split(','):
                 if p.strip(): final_materials.append(formatar_texto(p.strip()))
-        else:
-            final_materials.append(line)
+        else: final_materials.append(line)
     material_lines = final_materials
     vts_extra = extrair_vt_sobressalente(material_lines)
     total_extra_vt = sum(v['len'] for v in vts_extra)
@@ -1471,22 +1335,15 @@ def gerar_completo(ta):
         writer = PdfWriter()
         writer.addpages(PdfReader(fdata=base_pdf_stream.read()).pages)
         for b64 in anexos:
-            try:
-                writer.addpages(PdfReader(fdata=base64.b64decode(b64)).pages)
-            except Exception as e:
-                print(f"Erro ao mesclar anexo: {e}")
-        out_stream = io.BytesIO();
-        writer.write(out_stream);
-        out_stream.seek(0);
-        final_pdf = out_stream
-    else:
-        base_pdf_stream.seek(0); final_pdf = base_pdf_stream
-    return send_file(final_pdf, download_name=f"TA_{ta}_DOSSIE.pdf", as_attachment=True, mimetype='application/pdf')
-
+            try: writer.addpages(PdfReader(fdata=base64.b64decode(b64)).pages)
+            except Exception as e: print(f"Erro ao mesclar anexo: {e}")
+        out_stream = io.BytesIO(); writer.write(out_stream); out_stream.seek(0); final_pdf = out_stream
+    else: base_pdf_stream.seek(0); final_pdf = base_pdf_stream
+    
+    # ATUALIZADO AQUI PARA ATIVAR O PREVIEW:
+    return send_file(final_pdf, download_name=f"TA_{ta}_Arquivos.pdf", as_attachment=False, mimetype='application/pdf')
 
 if __name__ == '__main__':
     if not os.path.exists(TEMPLATE_PDF):
-        c = canvas.Canvas(TEMPLATE_PDF);
-        c.drawString(100, 700, "TEMPLATE AUSENTE");
-        c.save()
+        c = canvas.Canvas(TEMPLATE_PDF); c.drawString(100, 700, "TEMPLATE AUSENTE"); c.save()
     app.run(debug=True, port=5000)
