@@ -11,7 +11,7 @@ import textwrap
 import threading
 from telethon import TelegramClient
 
-# --- IMPORTAÇÃO DO ROBÔ SIGITM ---
+# ---SIGITM ---
 from scraper_vivo import buscar_dados_ta_sigitm, gerar_sessao_interativa
 
 # --- BIBLIOTECAS FIREBASE ---
@@ -127,7 +127,7 @@ def buscar_endereco_gps(lat, lon):
     short_plus_code = ""
 
     # ==========================================================
-    # GOOGLE MAPS API (OFICIAL)
+    # GOOGLE MAPS API
     # ==========================================================
     try:
         url = (
@@ -139,23 +139,28 @@ def buscar_endereco_gps(lat, lon):
         if resp.get("status") == "OK":
             if "plus_code" in resp:
                 plus_code = (
-                    resp["plus_code"].get("compound_code")
-                    or resp["plus_code"].get("global_code")
-                    or ""
+                        resp["plus_code"].get("compound_code")
+                        or resp["plus_code"].get("global_code")
+                        or ""
                 )
                 short_plus_code = plus_code.split()[0] if plus_code else ""
 
-            resultado = resp["results"][0]
-            for comp in resultado["address_components"]:
-                tipos = comp["types"]
-                if "route" in tipos:
-                    rua = comp["long_name"]
-                elif "street_number" in tipos:
-                    numero = comp["long_name"]
-                elif "administrative_area_level_2" in tipos:
-                    cidade = comp["long_name"]
-                elif "administrative_area_level_1" in tipos:
-                    estado = comp["short_name"]
+            # ----
+            for resultado in resp["results"]:
+                for comp in resultado["address_components"]:
+                    tipos = comp["types"]
+                    if "route" in tipos and not rua:
+                        rua = comp["long_name"]
+                    elif "street_number" in tipos and not numero:
+                        numero = comp["long_name"]
+                    elif "administrative_area_level_2" in tipos and not cidade:
+                        cidade = comp["long_name"]
+                    elif "administrative_area_level_1" in tipos and not estado:
+                        estado = comp["short_name"]
+
+                # Se achamos a rua e a cidade, já temos a maior precisão possível!
+                if rua and cidade:
+                    break
 
             if rua:
                 complemento = numero if numero else (short_plus_code if short_plus_code else "S/N")
@@ -165,7 +170,7 @@ def buscar_endereco_gps(lat, lon):
         pass
 
     # ==========================================================
-    # TENTA BUSCAR PELO PLUS CODE
+    # Busca pelo Plus Code
     # ==========================================================
     if plus_code:
         try:
@@ -175,14 +180,17 @@ def buscar_endereco_gps(lat, lon):
             )
             resp = requests.get(url, timeout=8).json()
             if resp.get("status") == "OK":
-                resultado = resp["results"][0]
-                rua = ""; numero = ""; cidade = ""
-
-                for comp in resultado["address_components"]:
-                    tipos = comp["types"]
-                    if "route" in tipos: rua = comp["long_name"]
-                    elif "street_number" in tipos: numero = comp["long_name"]
-                    elif "administrative_area_level_2" in tipos: cidade = comp["long_name"]
+                for resultado in resp["results"]:
+                    for comp in resultado["address_components"]:
+                        tipos = comp["types"]
+                        if "route" in tipos and not rua:
+                            rua = comp["long_name"]
+                        elif "street_number" in tipos and not numero:
+                            numero = comp["long_name"]
+                        elif "administrative_area_level_2" in tipos and not cidade:
+                            cidade = comp["long_name"]
+                    if rua:
+                        break
 
                 if rua:
                     complemento = numero if numero else short_plus_code
@@ -1175,7 +1183,7 @@ KML_HTML = """<!DOCTYPE html>
 </body></html>"""
 
 # ==========================================
-# ROTAS INVISÍVEIS PARA O ROBÔ DO CAPTCHA
+# ROTAS CAPTCHA
 # ==========================================
 def disparar_robo_login(user, pwd):
     loop = asyncio.new_event_loop()
