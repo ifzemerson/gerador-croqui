@@ -1,6 +1,7 @@
 import io
 import base64
-from flask import Flask, render_template_string, request, send_file, redirect, url_for, jsonify, session, Blueprint, flash
+from flask import Flask, render_template_string, request, send_file, redirect, url_for, jsonify, session, Blueprint, \
+    flash
 from reportlab.pdfgen import canvas
 from pdfrw import PdfReader, PdfWriter, PageMerge
 from pathlib import Path
@@ -11,7 +12,7 @@ import textwrap
 import threading
 from telethon import TelegramClient
 
-# ---SIGITM ---
+# --- IMPORTAÇÃO SIGITM ---
 from scraper_vivo import buscar_dados_ta_sigitm, gerar_sessao_interativa
 
 # --- BIBLIOTECAS FIREBASE ---
@@ -63,6 +64,7 @@ DB_ALIASES = {
     "cleber": "cleiton irani rodrigues benfica"
 }
 
+
 # --- FUNÇÕES DE COMUNICAÇÃO FIREBASE ---
 def load_db():
     try:
@@ -77,12 +79,14 @@ def load_db():
         print(f"Erro na carga seletiva: {e}")
         return {"tecnicos": {}, "veiculos": {}, "locais_kml": {}, "croquis": {}}
 
+
 def save_db(data):
     try:
         ref = firebase_db.reference('/')
         ref.set(data)
     except Exception as e:
         print(f"Erro Save Firebase: {e}")
+
 
 # --- CONFIGURAÇÕES DE PDF ---
 COORDS = {
@@ -95,6 +99,7 @@ COORDS = {
 }
 EXEC_CONFIG = {'name_x': 0.47, 're_x': 0.65, 'start_y': 0.212, 'step_y': 0.028, 'max_rows': 6}
 FILTRO_LANCAMENTO = ["metr", "lancado", "lançado", "lancamento", "lançamento"]
+
 
 # --- FUNÇÃO TELEGRAM ---
 async def search_telegram_message(ta_number):
@@ -115,6 +120,7 @@ async def search_telegram_message(ta_number):
         print(f"Erro Telegram: {e}")
     return None
 
+
 # --- FUNÇÕES DE BUSCA E FORMATAÇÃO ---
 def buscar_endereco_gps(lat, lon):
     import requests
@@ -126,26 +132,16 @@ def buscar_endereco_gps(lat, lon):
     plus_code = ""
     short_plus_code = ""
 
-    # ==========================================================
-    # GOOGLE MAPS API
-    # ==========================================================
     try:
         url = (
-            f"https://maps.googleapis.com/maps/api/geocode/json"
-            f"?latlng={lat},{lon}&key={GOOGLE_API_KEY}&language=pt-BR"
-        )
+            f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lon}&key={GOOGLE_API_KEY}&language=pt-BR")
         resp = requests.get(url, timeout=8).json()
 
         if resp.get("status") == "OK":
             if "plus_code" in resp:
-                plus_code = (
-                        resp["plus_code"].get("compound_code")
-                        or resp["plus_code"].get("global_code")
-                        or ""
-                )
+                plus_code = (resp["plus_code"].get("compound_code") or resp["plus_code"].get("global_code") or "")
                 short_plus_code = plus_code.split()[0] if plus_code else ""
 
-            # ----
             for resultado in resp["results"]:
                 for comp in resultado["address_components"]:
                     tipos = comp["types"]
@@ -158,26 +154,19 @@ def buscar_endereco_gps(lat, lon):
                     elif "administrative_area_level_1" in tipos and not estado:
                         estado = comp["short_name"]
 
-                # Se achamos a rua e a cidade, já temos a maior precisão possível!
                 if rua and cidade:
                     break
 
             if rua:
                 complemento = numero if numero else (short_plus_code if short_plus_code else "S/N")
                 return (f"{rua}, {complemento}", f"{cidade} - {estado}", short_plus_code)
-
     except Exception:
         pass
 
-    # ==========================================================
-    # Busca pelo Plus Code
-    # ==========================================================
     if plus_code:
         try:
             url = (
-                f"https://maps.googleapis.com/maps/api/geocode/json"
-                f"?address={plus_code}&key={GOOGLE_API_KEY}&language=pt-BR"
-            )
+                f"https://maps.googleapis.com/maps/api/geocode/json?address={plus_code}&key={GOOGLE_API_KEY}&language=pt-BR")
             resp = requests.get(url, timeout=8).json()
             if resp.get("status") == "OK":
                 for resultado in resp["results"]:
@@ -189,8 +178,7 @@ def buscar_endereco_gps(lat, lon):
                             numero = comp["long_name"]
                         elif "administrative_area_level_2" in tipos and not cidade:
                             cidade = comp["long_name"]
-                    if rua:
-                        break
+                    if rua: break
 
                 if rua:
                     complemento = numero if numero else short_plus_code
@@ -198,9 +186,6 @@ def buscar_endereco_gps(lat, lon):
         except Exception:
             pass
 
-    # ==========================================================
-    # ARCGIS
-    # ==========================================================
     try:
         geo_arc = ArcGIS(user_agent="sistema_croqui_v1")
         loc = geo_arc.reverse(f"{lat}, {lon}", timeout=8)
@@ -209,19 +194,14 @@ def buscar_endereco_gps(lat, lon):
             partes = texto.split(",")
             rua = partes[0].strip()
             numero = ""
-            if len(partes) > 1 and partes[1].strip().isdigit():
-                numero = partes[1].strip()
-            if len(partes) >= 3:
-                cidade = partes[-3].strip()
+            if len(partes) > 1 and partes[1].strip().isdigit(): numero = partes[1].strip()
+            if len(partes) >= 3: cidade = partes[-3].strip()
 
             complemento = numero if numero else (short_plus_code if short_plus_code else "S/N")
             return (f"{rua}, {complemento}", f"{cidade} - {estado}", short_plus_code)
     except Exception:
         pass
 
-    # ==========================================================
-    # OPENSTREETMAP
-    # ==========================================================
     try:
         geo = Nominatim(user_agent="croqui_vivo")
         loc = geo.reverse(f"{lat}, {lon}", timeout=8)
@@ -237,13 +217,10 @@ def buscar_endereco_gps(lat, lon):
     except Exception:
         pass
 
-    # ==========================================================
-    # ÚLTIMO RECURSO
-    # ==========================================================
     if plus_code:
         return (f"Plus Code: {plus_code}", f"{cidade} - {estado}" if cidade else estado, short_plus_code)
-
     return (f"GPS: {lat}, {lon}", f"{cidade} - {estado}" if cidade else estado, "")
+
 
 def formatar_texto(texto):
     if not texto: return ""
@@ -258,7 +235,9 @@ def formatar_texto(texto):
     for p in placas: texto = texto.replace(p, p.upper())
     return texto
 
+
 def pct_to_pt(xpct, ypct, width_pt, height_pt): return xpct * width_pt, ypct * height_pt
+
 
 def organizar_tratativas(texto_bruto):
     texto = re.sub(r'\b(?:feito|realizado)\b', ' ', texto_bruto, flags=re.IGNORECASE)
@@ -266,6 +245,7 @@ def organizar_tratativas(texto_bruto):
     padrao_num = r'(?=\b(?:\d{1,4}\s*(?:fus[ãa]o|fus[õo]es|testes?|emendas?|ceo|caixas?|aberturas?|reaberturas?|ptro)|vt\s+sobressalente)\b)'
     texto = re.sub(padrao_num, '\n', texto, flags=re.IGNORECASE)
     return texto
+
 
 def extrair_tronco_seguro(text):
     texto_limpo = text.replace('*', '')
@@ -283,6 +263,7 @@ def extrair_tronco_seguro(text):
             if m_limpo and m_limpo != "0": validos.append(m_limpo)
     if validos: return validos[-1]
     return ""
+
 
 def extrair_executantes_seguro(text, db):
     exec_list = []
@@ -326,6 +307,7 @@ def extrair_executantes_seguro(text, db):
                 exec_list.append({'name': db_name.title(), 're': db['tecnicos'][db_name].get('re', '')})
     return exec_list
 
+
 def extrair_siglas_seguro(text):
     texto_limpo = re.sub(r'http[s]?://\S+', '', text, flags=re.IGNORECASE)
     padroes = [
@@ -343,6 +325,7 @@ def extrair_siglas_seguro(text):
         for m in reversed(m_loose):
             if m[0].upper() != "VIVO" and m[1].upper() != "COM": return m[0].upper(), m[1].upper()
     return "", ""
+
 
 def extract_fields_sigitm(text, db):
     data = {key: '' for key in
@@ -375,6 +358,7 @@ def extract_fields_sigitm(text, db):
                        re.DOTALL | re.IGNORECASE)
     raw_mat = m_acao.group(1).strip() if m_acao else ""
     return data, raw_mat
+
 
 def extract_fields(text, db):
     data = {key: '' for key in
@@ -446,6 +430,7 @@ def extract_fields(text, db):
         raw_mat = "\n".join(tmp)
     return data, raw_mat
 
+
 def detect_launch(material_lines):
     joined = " ".join(material_lines).lower()
     if "repuxad" in joined: return None
@@ -456,10 +441,12 @@ def detect_launch(material_lines):
         if m: return int(m.group(1))
     return None
 
+
 def detect_double_point(material_lines):
     joined = " ".join(material_lines).lower()
     if re.search(r"\b(?:02|2)\s*(?:reabertura|abertura|ceo|caixa|ctop|emenda)", joined): return True
     return False
+
 
 def extrair_vt_sobressalente(linhas_ou_texto):
     vts = []
@@ -478,6 +465,7 @@ def extrair_vt_sobressalente(linhas_ou_texto):
             if not any(v['len'] == vt_len and v['xc'] == xc_idx for v in vts): vts.append({'len': vt_len, 'xc': xc_idx})
     return vts
 
+
 def generate_pps(total_length, vt_each=15, extra_vt=0):
     usable = total_length - (2 * vt_each) - extra_vt
     if usable <= 0: return []
@@ -487,6 +475,7 @@ def generate_pps(total_length, vt_each=15, extra_vt=0):
     spans = [base_span] * num_spans
     for i in range(resto): spans[i] += 1
     return spans
+
 
 def dividir_tratativas(material_lines):
     divs = ["fus", "fusão", "fusões", "fusao", "tubo", "loose", "teste", "otdr"]
@@ -518,6 +507,7 @@ def dividir_tratativas(material_lines):
             continue
         p1.append(orig)
     return p1, p2
+
 
 def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     if vts_extra is None: vts_extra = []
@@ -682,6 +672,7 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     packet.seek(0)
     return packet
 
+
 def merge_overlay(overlay_stream):
     out_stream = io.BytesIO()
     if not os.path.exists(TEMPLATE_PDF):
@@ -696,6 +687,7 @@ def merge_overlay(overlay_stream):
     out_stream.seek(0)
     return out_stream
 
+
 # ==========================================
 # FUNÇÕES E BLUEPRINT KML
 # ==========================================
@@ -703,6 +695,7 @@ def remove_namespace(tree):
     for elem in tree.iter():
         if '}' in elem.tag: elem.tag = elem.tag.split('}', 1)[1]
     return tree
+
 
 def read_kml(file_path):
     if not os.path.exists(file_path): return []
@@ -719,6 +712,7 @@ def read_kml(file_path):
                 pass
     return sorted(places, key=lambda p: p["name"].lower())
 
+
 def add_placemark(file_path, name, lat, lon):
     tree = remove_namespace(ET.parse(file_path))
     root = tree.getroot()
@@ -730,40 +724,51 @@ def add_placemark(file_path, name, lat, lon):
     tree.write(file_path, encoding='utf-8', xml_declaration=True)
     return True
 
+
 def get_coordinates_from_link(link):
-    match = re.search(r"https:\/\/(?:www\.)?google\.com\/maps\/(?:[\w\-]+\/\@|\?q=|\?ll=)(-?\d+\.\d+),(-?\d+\.\d+)", link)
+    match = re.search(r"https:\/\/(?:www\.)?google\.com\/maps\/(?:[\w\-]+\/\@|\?q=|\?ll=)(-?\d+\.\d+),(-?\d+\.\d+)",
+                      link)
     return (match.group(1), match.group(2)) if match else (None, None)
 
+
 mapa_bp = Blueprint('mapa', __name__, url_prefix='/mapa')
+
 
 def clean_firebase_key(name):
     return str(name).replace('.', '_').replace('#', '_').replace('$', '_').replace('[', '_').replace(']', '_')
 
+
 @mapa_bp.route('/')
 def index_mapa():
     places_kml = read_kml(KML_PATH)
-    db, locais_nuvem, places_nuvem, deletados, nomes_na_nuvem = load_db(), load_db().get('locais_kml', {}), [], set(), set()
+    db, locais_nuvem, places_nuvem, deletados, nomes_na_nuvem = load_db(), load_db().get('locais_kml',
+                                                                                         {}), [], set(), set()
     for safe_key, data in locais_nuvem.items():
         if isinstance(data, dict):
             nome_real = data.get('name', safe_key)
             if data.get('deleted'):
                 deletados.add(nome_real)
             else:
-                nomes_na_nuvem.add(nome_real); places_nuvem.append(
+                nomes_na_nuvem.add(nome_real);
+                places_nuvem.append(
                     {"name": nome_real, "lat": data.get('lat', ''), "lon": data.get('lon', '')})
     todos_places = places_nuvem.copy()
     for p in places_kml:
         if p['name'] not in nomes_na_nuvem and p['name'] not in deletados: todos_places.append(p)
     return render_template_string(KML_HTML, places=sorted(todos_places, key=lambda p: str(p.get("name", "")).lower()))
 
+
 @mapa_bp.route('/add', methods=['POST'])
 def add():
-    name, lat, lon = request.form['name'].upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon', '').strip()
+    name, lat, lon = request.form['name'].upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon',
+                                                                                                                 '').strip()
     maps_link = request.form.get('mapsLink')
     if maps_link:
         lat, lon = get_coordinates_from_link(maps_link)
-        if not lat or not lon: flash("Link do Google Maps inválido.", "error"); return redirect(url_for('mapa.index_mapa'))
-    if not lat or not lon: flash("Preencha as coordenadas ou cole um link do Maps.", "error"); return redirect(url_for('mapa.index_mapa'))
+        if not lat or not lon: flash("Link do Google Maps inválido.", "error"); return redirect(
+            url_for('mapa.index_mapa'))
+    if not lat or not lon: flash("Preencha as coordenadas ou cole um link do Maps.", "error"); return redirect(
+        url_for('mapa.index_mapa'))
     safe_name = clean_firebase_key(name)
     db = load_db()
     if safe_name in db['locais_kml'] and not db['locais_kml'][safe_name].get('deleted'):
@@ -777,9 +782,12 @@ def add():
     flash("Local adicionado com sucesso!", "success");
     return redirect(url_for('mapa.index_mapa'))
 
+
 @mapa_bp.route('/edit', methods=['POST'])
 def edit():
-    orig_name, new_name, lat, lon = request.form.get('original_name', '').strip(), request.form.get('name', '').upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon', '').strip()
+    orig_name, new_name, lat, lon = request.form.get('original_name', '').strip(), request.form.get('name',
+                                                                                                    '').upper().strip(), request.form.get(
+        'lat', '').strip(), request.form.get('lon', '').strip()
     maps_link = request.form.get('mapsLink')
     if maps_link:
         parsed_lat, parsed_lon = get_coordinates_from_link(maps_link)
@@ -791,6 +799,7 @@ def edit():
     flash("Local atualizado com sucesso!", "success");
     return redirect(url_for('mapa.index_mapa'))
 
+
 @mapa_bp.route('/delete', methods=['POST'])
 def delete():
     name = request.form.get('name', '').strip()
@@ -799,6 +808,7 @@ def delete():
     save_db(db);
     flash(f"Local {name} apagado com sucesso!", "success");
     return redirect(url_for('mapa.index_mapa'))
+
 
 app.register_blueprint(mapa_bp)
 
@@ -933,8 +943,16 @@ input.edit-input{padding:8px; border:1px solid #ccc; border-radius:4px; width:10
 .nav-tab { padding: 12px 25px; text-decoration: none; color: #555; font-weight: bold; font-size: 15px; margin-bottom: -2px; border-bottom: 3px solid transparent; transition: 0.2s; }
 .nav-tab:hover { color: #007bff; }
 .nav-tab.active { color: #007bff; border-bottom: 3px solid #007bff; }
+/* Modal de Ordem */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; display: none; justify-content: center; align-items: center; }
+.modal-content { background: #fff; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; }
+.close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #888; font-weight: bold; }
+.close-btn:hover { color: #dc3545; }
 </style>
 <script>
+const croquisData = {{ croquis_json | safe }};
+let currentTA = null;
+
 document.addEventListener('DOMContentLoaded', () => {
     const searchCroquis = document.getElementById('search-croquis');
     if (searchCroquis) {
@@ -984,7 +1002,80 @@ function limparAnexos(ta) {
         if(data.status === 'success') location.reload();
     });
 }
+
+function abrirOrdemModal(ta) {
+    currentTA = ta;
+    const data = croquisData[ta];
+    const ul = document.getElementById('lista-ordem');
+    ul.innerHTML = '';
+
+    const mapNames = {'croqui': '📄 Croqui (Gerador)'};
+    data.anexos_info.forEach(a => mapNames[a.id] = '📎 ' + a.name);
+
+    data.file_order.forEach(id => {
+        if(!mapNames[id]) return;
+        const li = document.createElement('li');
+        li.style = "display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid #ccc; margin-bottom: 5px; border-radius: 4px; background: #fafafa;";
+        li.dataset.id = id;
+
+        const span = document.createElement('span');
+        span.innerText = mapNames[id];
+        span.style = "font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;";
+
+        const divBtns = document.createElement('div');
+        divBtns.innerHTML = `
+            <button type="button" onclick="moverItem(this, -1)" style="border:none; background:none; cursor:pointer; font-size:18px;" title="Subir">🔼</button>
+            <button type="button" onclick="moverItem(this, 1)" style="border:none; background:none; cursor:pointer; font-size:18px;" title="Descer">🔽</button>
+        `;
+
+        li.appendChild(span);
+        li.appendChild(divBtns);
+        ul.appendChild(li);
+    });
+
+    document.getElementById('ordemModal').style.display = 'flex';
+}
+
+function moverItem(btn, dir) {
+    const li = btn.closest('li');
+    const ul = li.parentNode;
+    if (dir === -1 && li.previousElementSibling) {
+        ul.insertBefore(li, li.previousElementSibling);
+    } else if (dir === 1 && li.nextElementSibling) {
+        ul.insertBefore(li.nextElementSibling, li);
+    }
+}
+
+function salvarNovaOrdem() {
+    const items = document.querySelectorAll('#lista-ordem li');
+    const novaOrdem = Array.from(items).map(li => li.dataset.id);
+
+    let formData = new FormData();
+    formData.append('ta', currentTA);
+    formData.append('order', JSON.stringify(novaOrdem));
+
+    fetch('/api/salvar_ordem', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+        if(data.status === 'success') {
+            croquisData[currentTA].file_order = novaOrdem;
+            document.getElementById('ordemModal').style.display = 'none';
+        } else {
+            alert('Erro ao salvar a ordem.');
+        }
+    });
+}
 </script></head><body><div class="container">
+
+<div id="ordemModal" class="modal-overlay">
+    <div class="modal-content">
+        <span class="close-btn" onclick="document.getElementById('ordemModal').style.display='none'">×</span>
+        <h3 style="margin-top:0; color:#444; border-bottom: 2px solid #eee; padding-bottom: 10px;">Organizar PDFs</h3>
+        <p style="font-size: 13px; color: #666;">Use as setas para definir a ordem final do documento.</p>
+        <ul id="lista-ordem" style="list-style: none; padding: 0; margin: 0;"></ul>
+        <button class="btn" style="background:#28a745; color:#fff; width: 100%; margin-top: 15px; padding: 12px; font-size: 16px;" onclick="salvarNovaOrdem()">💾 Salvar Ordem</button>
+    </div>
+</div>
 
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
 <h2 style="margin:0; color:#333;">Nuvem de Operações</h2><div><a href="/" style="text-decoration:none; color:#007bff; margin-right:15px;">« Gerador</a> <a href="/logout" style="text-decoration:none; color:#dc3545;">Sair</a></div></div>
@@ -1011,8 +1102,9 @@ function limparAnexos(ta) {
     <td style="text-align:center; white-space:nowrap;">
         <input type="file" id="file-{{ ta }}" multiple accept="application/pdf" style="display:none;" onchange="uploadAnexo('{{ ta }}', this)">
         <form method="post" action="/preencher" style="display:inline;" target="_blank"><input type="hidden" name="raw_text" value="{{ ta }}"><button type="submit" class="btn btn-edit" style="margin-right:2px; padding:6px 10px; background:#007bff; color:#fff;" title="Editar">✏️</button></form>
-        <button type="button" class="btn" style="padding:6px 10px; background:#6c757d; margin-right:2px;" onclick="document.getElementById('file-{{ ta }}').click()" title="Anexar PDFs">📎 {{ dados.get('anexos', []) | length }}</button>
-        {% if dados.get('anexos', []) | length > 0 %}
+        <button type="button" class="btn" style="padding:6px 10px; background:#6c757d; margin-right:2px;" onclick="document.getElementById('file-{{ ta }}').click()" title="Anexar PDFs">📎 {{ dados.anexos_count }}</button>
+        {% if dados.anexos_count > 0 %}
+            <button type="button" class="btn" style="padding:6px 10px; background:#17a2b8; color:#fff; margin-right:2px;" onclick="abrirOrdemModal('{{ ta }}')" title="Organizar Arquivos">🗂️</button>
             <button type="button" class="btn" style="padding:6px 10px; background:#ffc107; color:#000; margin-right:2px;" onclick="limparAnexos('{{ ta }}')" title="Limpar Anexos">🧹</button>
         {% endif %}
         <a href="/gerar_completo/{{ ta }}" target="_blank" class="btn" style="padding:6px 10px; background:#28a745; text-decoration:none; color:#fff; margin-right:2px;" title="Gerar Croqui + Anexos">📄 PDF</a>
@@ -1182,6 +1274,7 @@ KML_HTML = """<!DOCTYPE html>
 </script>
 </body></html>"""
 
+
 # ==========================================
 # ROTAS CAPTCHA
 # ==========================================
@@ -1191,6 +1284,7 @@ def disparar_robo_login(user, pwd):
     loop.run_until_complete(gerar_sessao_interativa(user, pwd))
     loop.close()
 
+
 @app.route('/api/iniciar_login', methods=['POST'])
 def api_iniciar_login():
     user, pwd = request.form.get('user'), request.form.get('pwd')
@@ -1198,6 +1292,7 @@ def api_iniciar_login():
         if os.path.exists(f): os.remove(f)
     threading.Thread(target=disparar_robo_login, args=(user, pwd)).start()
     return jsonify({"status": "ok"})
+
 
 @app.route('/api/status_login')
 def api_status_login():
@@ -1208,10 +1303,12 @@ def api_status_login():
         return jsonify({"status": "esperando_captcha", "img": "/static/captcha.png"})
     return jsonify({"status": "carregando"})
 
+
 @app.route('/api/enviar_captcha', methods=['POST'])
 def api_enviar_captcha():
     with open('static/captcha_answer.txt', 'w') as f: f.write(request.form.get('captcha'))
     return jsonify({"status": "enviado"})
+
 
 # --- ROTAS DE ADMINISTRAÇÃO E COMUNICAÇÃO FIREBASE ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -1224,8 +1321,10 @@ def login():
             return render_template_string(LOGIN_HTML, erro=True)
     return render_template_string(LOGIN_HTML, erro=False)
 
+
 @app.route('/logout')
 def logout(): session.pop('admin_logged_in', None); return redirect(url_for('index'))
+
 
 @app.route('/api/update_or_ot', methods=['POST'])
 def api_update_or_ot():
@@ -1235,6 +1334,7 @@ def api_update_or_ot():
         save_db(db);
         return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
+
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -1274,6 +1374,7 @@ def admin():
         return redirect(url_for('admin'))
     return render_template_string(ADMIN_HTML, tecnicos=dict(sorted(db['tecnicos'].items())), veiculos=db['veiculos'])
 
+
 @app.route('/relatorios', methods=['GET', 'POST'])
 def relatorios():
     if not session.get('admin_logged_in'): return redirect(url_for('login'))
@@ -1282,20 +1383,57 @@ def relatorios():
         ta = request.form.get('ta')
         if ta and 'croquis' in db and ta in db['croquis']: del db['croquis'][ta]; save_db(db)
         return redirect(url_for('relatorios'))
-    return render_template_string(RELATORIOS_HTML, croquis=dict(sorted(db.get('croquis', {}).items(), reverse=True)))
+
+    # Processa os dados para a interface, incluindo ordem de arquivos
+    croquis_view = {}
+    croquis_json_data = {}
+
+    for ta, dados in sorted(db.get('croquis', {}).items(), reverse=True):
+        anexos = dados.get('anexos', [])
+        anexos_info = []
+        for i, ax in enumerate(anexos):
+            if isinstance(ax, dict):
+                anexos_info.append({'id': f'anexo_{i}', 'name': ax.get('name', f'Anexo {i + 1}')})
+            else:
+                anexos_info.append({'id': f'anexo_{i}', 'name': f'Anexo {i + 1}'})
+
+        default_order = ['croqui'] + [a['id'] for a in anexos_info]
+        file_order = dados.get('file_order', default_order)
+
+        valid_ids = ['croqui'] + [a['id'] for a in anexos_info]
+        file_order = [x for x in file_order if x in valid_ids]
+        for vid in valid_ids:
+            if vid not in file_order: file_order.append(vid)
+
+        croquis_view[ta] = {
+            'parsed': dados.get('parsed', {}),
+            'anexos_count': len(anexos)
+        }
+        croquis_json_data[ta] = {
+            'anexos_info': anexos_info,
+            'file_order': file_order
+        }
+
+    croquis_json_str = json.dumps(croquis_json_data)
+
+    return render_template_string(RELATORIOS_HTML, croquis=croquis_view, croquis_json=croquis_json_str)
+
 
 # --- ROTAS PRINCIPAIS ---
 @app.route('/')
 def index(): return render_template_string(PASTE_HTML)
+
 
 @app.route('/tecnicos')
 def tecnicos(): return json.dumps(
     [{'name': k, 're': v.get('re', ''), 'area': v.get('area', ''), 'supervisor': v.get('supervisor', '')} for k, v in
      load_db()['tecnicos'].items()])
 
+
 @app.route('/form')
 def form_vazio(): return render_template_string(FORM_HTML, data={}, itens_texto="", executantes_list=[],
                                                 veiculos_map=load_db()['veiculos'])
+
 
 @app.route('/preencher', methods=['POST'])
 def preencher():
@@ -1349,6 +1487,7 @@ def preencher():
     return render_template_string(FORM_HTML, data=parsed_data, itens_texto=itens_texto, executantes_list=exec_names,
                                   veiculos_map=db['veiculos'])
 
+
 @app.route('/generate', methods=['POST'])
 def generate():
     db = load_db()
@@ -1393,6 +1532,7 @@ def generate():
 
     return redirect(url_for('visualizar_croqui', ta=codigo))
 
+
 @app.route('/croqui/<ta>.pdf')
 def visualizar_croqui(ta):
     db = load_db()
@@ -1433,31 +1573,62 @@ def visualizar_croqui(ta):
         mimetype='application/pdf'
     )
 
+
 @app.route('/api/upload_anexo', methods=['POST'])
 def api_upload_anexo():
     ta, files, db = request.form.get('ta'), request.files.getlist('pdf_files'), load_db()
     if ta and 'croquis' in db and ta in db['croquis']:
         if 'anexos' not in db['croquis'][ta]: db['croquis'][ta]['anexos'] = []
-        for f in files:
-            if f and f.filename.lower().endswith('.pdf'): db['croquis'][ta]['anexos'].append(
-                base64.b64encode(f.read()).decode('utf-8'))
-        save_db(db);
+
+        current_order = db['croquis'][ta].get('file_order', ['croqui'])
+        current_len = len(db['croquis'][ta]['anexos'])
+
+        for i, f in enumerate(files):
+            if f and f.filename.lower().endswith('.pdf'):
+                db['croquis'][ta]['anexos'].append({
+                    'name': f.filename,
+                    'data': base64.b64encode(f.read()).decode('utf-8')
+                })
+                current_order.append(f'anexo_{current_len + i}')
+
+        db['croquis'][ta]['file_order'] = current_order
+        save_db(db)
         return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
+
+
+@app.route('/api/salvar_ordem', methods=['POST'])
+def api_salvar_ordem():
+    ta = request.form.get('ta')
+    order = json.loads(request.form.get('order', '[]'))
+    db = load_db()
+    if ta and 'croquis' in db and ta in db['croquis']:
+        db['croquis'][ta]['file_order'] = order
+        save_db(db)
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error"}), 400
+
 
 @app.route('/api/limpar_anexos', methods=['POST'])
 def api_limpar_anexos():
     ta, db = request.form.get('ta'), load_db()
-    if ta and 'croquis' in db and ta in db['croquis']: db['croquis'][ta]['anexos'] = []; save_db(db); return jsonify(
-        {"status": "success"})
+    if ta and 'croquis' in db and ta in db['croquis']:
+        db['croquis'][ta]['anexos'] = []
+        db['croquis'][ta]['file_order'] = ['croqui']
+        save_db(db)
+        return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
+
 
 @app.route('/gerar_completo/<ta>')
 def gerar_completo(ta):
     db = load_db()
     if 'croquis' not in db or ta not in db['croquis']: return "Croqui não encontrado na nuvem.", 404
     dados = db['croquis'][ta]
-    parsed, itens_raw, anexos = dados.get('parsed', {}), dados.get('itens_raw', ''), dados.get('anexos', [])
+    parsed = dados.get('parsed', {})
+    itens_raw = dados.get('itens_raw', '')
+    anexos = dados.get('anexos', [])
+
     material_lines = [formatar_texto(l.strip()) for l in itens_raw.splitlines() if l.strip()]
     final_materials = []
     for line in material_lines:
@@ -1474,25 +1645,50 @@ def gerar_completo(ta):
     if total_len is None and detect_double_point(material_lines): is_double_point = True; total_len = 0
     pp_list = generate_pps(total_len, extra_vt=total_extra_vt) if total_len is not None and total_len > 0 else (
         [0, 0, 0, 0] if is_double_point else [])
+
     overlay_stream = create_overlay(parsed, material_lines, pp_list, vts_extra)
     base_pdf_stream = merge_overlay(overlay_stream)
-    if anexos:
+
+    anexos_info = [f'anexo_{i}' for i in range(len(anexos))]
+    default_order = ['croqui'] + anexos_info
+    file_order = dados.get('file_order', default_order)
+
+    valid_ids = ['croqui'] + anexos_info
+    file_order = [x for x in file_order if x in valid_ids]
+    for vid in valid_ids:
+        if vid not in file_order: file_order.append(vid)
+
+    if anexos or file_order != ['croqui']:
         from pdfrw import PdfReader, PdfWriter
         writer = PdfWriter()
-        writer.addpages(PdfReader(fdata=base_pdf_stream.read()).pages)
-        for b64 in anexos:
-            try:
-                writer.addpages(PdfReader(fdata=base64.b64decode(b64)).pages)
-            except Exception as e:
-                print(f"Erro ao mesclar anexo: {e}")
-        out_stream = io.BytesIO();
-        writer.write(out_stream);
-        out_stream.seek(0);
+
+        croqui_page_added = False
+        for item_id in file_order:
+            if item_id == 'croqui':
+                if not croqui_page_added:
+                    base_pdf_stream.seek(0)
+                    writer.addpages(PdfReader(fdata=base_pdf_stream.read()).pages)
+                    croqui_page_added = True
+            elif item_id.startswith('anexo_'):
+                idx = int(item_id.split('_')[1])
+                if idx < len(anexos):
+                    ax = anexos[idx]
+                    b64 = ax['data'] if isinstance(ax, dict) else ax
+                    try:
+                        writer.addpages(PdfReader(fdata=base64.b64decode(b64)).pages)
+                    except Exception as e:
+                        print(f"Erro ao mesclar {item_id}: {e}")
+
+        out_stream = io.BytesIO()
+        writer.write(out_stream)
+        out_stream.seek(0)
         final_pdf = out_stream
     else:
-        base_pdf_stream.seek(0); final_pdf = base_pdf_stream
+        base_pdf_stream.seek(0)
+        final_pdf = base_pdf_stream
 
     return send_file(final_pdf, download_name=f"TA_{ta}_Arquivos.pdf", as_attachment=False, mimetype='application/pdf')
+
 
 if __name__ == '__main__':
     if not os.path.exists(TEMPLATE_PDF):
