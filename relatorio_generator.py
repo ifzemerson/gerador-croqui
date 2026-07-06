@@ -1,7 +1,6 @@
 import io
 import base64
-from flask import Flask, render_template_string, request, send_file, redirect, url_for, jsonify, session, Blueprint, \
-    flash
+from flask import Flask, render_template_string, request, send_file, redirect, url_for, jsonify, session, Blueprint, flash
 from reportlab.pdfgen import canvas
 from pdfrw import PdfReader, PdfWriter, PageMerge
 from pathlib import Path
@@ -64,7 +63,6 @@ DB_ALIASES = {
     "cleber": "cleiton irani rodrigues benfica"
 }
 
-
 # --- FUNÇÕES DE COMUNICAÇÃO FIREBASE ---
 def load_db():
     try:
@@ -79,14 +77,12 @@ def load_db():
         print(f"Erro na carga seletiva: {e}")
         return {"tecnicos": {}, "veiculos": {}, "locais_kml": {}, "croquis": {}}
 
-
 def save_db(data):
     try:
         ref = firebase_db.reference('/')
         ref.set(data)
     except Exception as e:
         print(f"Erro Save Firebase: {e}")
-
 
 # --- CONFIGURAÇÕES DE PDF ---
 COORDS = {
@@ -99,7 +95,6 @@ COORDS = {
 }
 EXEC_CONFIG = {'name_x': 0.47, 're_x': 0.65, 'start_y': 0.212, 'step_y': 0.028, 'max_rows': 6}
 FILTRO_LANCAMENTO = ["metr", "lancado", "lançado", "lancamento", "lançamento"]
-
 
 # --- FUNÇÃO TELEGRAM ---
 async def search_telegram_message(ta_number):
@@ -120,7 +115,6 @@ async def search_telegram_message(ta_number):
         print(f"Erro Telegram: {e}")
     return None
 
-
 # --- FUNÇÕES DE BUSCA E FORMATAÇÃO ---
 def buscar_endereco_gps(lat, lon):
     import requests
@@ -130,6 +124,7 @@ def buscar_endereco_gps(lat, lon):
     cidade = ""
     estado = "SP"
     plus_code = ""
+    short_plus_code = ""
 
     # ==========================================================
     # GOOGLE MAPS API (OFICIAL)
@@ -139,44 +134,32 @@ def buscar_endereco_gps(lat, lon):
             f"https://maps.googleapis.com/maps/api/geocode/json"
             f"?latlng={lat},{lon}&key={GOOGLE_API_KEY}&language=pt-BR"
         )
-
         resp = requests.get(url, timeout=8).json()
 
         if resp.get("status") == "OK":
-
             if "plus_code" in resp:
                 plus_code = (
                     resp["plus_code"].get("compound_code")
                     or resp["plus_code"].get("global_code")
                     or ""
                 )
+                short_plus_code = plus_code.split()[0] if plus_code else ""
 
             resultado = resp["results"][0]
-
             for comp in resultado["address_components"]:
-
                 tipos = comp["types"]
-
                 if "route" in tipos:
                     rua = comp["long_name"]
-
                 elif "street_number" in tipos:
                     numero = comp["long_name"]
-
                 elif "administrative_area_level_2" in tipos:
                     cidade = comp["long_name"]
-
                 elif "administrative_area_level_1" in tipos:
                     estado = comp["short_name"]
 
             if rua:
-                complemento = numero if numero else (
-                    plus_code.split()[0] if plus_code else "S/N"
-                )
-                return (
-                    f"{rua}, {complemento}",
-                    f"{cidade} - {estado}"
-                )
+                complemento = numero if numero else (short_plus_code if short_plus_code else "S/N")
+                return (f"{rua}, {complemento}", f"{cidade} - {estado}", short_plus_code)
 
     except Exception:
         pass
@@ -185,46 +168,25 @@ def buscar_endereco_gps(lat, lon):
     # TENTA BUSCAR PELO PLUS CODE
     # ==========================================================
     if plus_code:
-
         try:
-
             url = (
                 f"https://maps.googleapis.com/maps/api/geocode/json"
                 f"?address={plus_code}&key={GOOGLE_API_KEY}&language=pt-BR"
             )
-
             resp = requests.get(url, timeout=8).json()
-
             if resp.get("status") == "OK":
-
                 resultado = resp["results"][0]
-
-                rua = ""
-                numero = ""
-                cidade = ""
+                rua = ""; numero = ""; cidade = ""
 
                 for comp in resultado["address_components"]:
-
                     tipos = comp["types"]
-
-                    if "route" in tipos:
-                        rua = comp["long_name"]
-
-                    elif "street_number" in tipos:
-                        numero = comp["long_name"]
-
-                    elif "administrative_area_level_2" in tipos:
-                        cidade = comp["long_name"]
+                    if "route" in tipos: rua = comp["long_name"]
+                    elif "street_number" in tipos: numero = comp["long_name"]
+                    elif "administrative_area_level_2" in tipos: cidade = comp["long_name"]
 
                 if rua:
-
-                    complemento = numero if numero else plus_code.split()[0]
-
-                    return (
-                        f"{rua}, {complemento}",
-                        f"{cidade} - {estado}"
-                    )
-
+                    complemento = numero if numero else short_plus_code
+                    return (f"{rua}, {complemento}", f"{cidade} - {estado}", short_plus_code)
         except Exception:
             pass
 
@@ -232,38 +194,20 @@ def buscar_endereco_gps(lat, lon):
     # ARCGIS
     # ==========================================================
     try:
-
         geo_arc = ArcGIS(user_agent="sistema_croqui_v1")
-
         loc = geo_arc.reverse(f"{lat}, {lon}", timeout=8)
-
         if loc and loc.raw.get("address"):
-
             texto = loc.raw["address"]
-
             partes = texto.split(",")
-
             rua = partes[0].strip()
-
             numero = ""
-
-            if len(partes) > 1:
-
-                if partes[1].strip().isdigit():
-                    numero = partes[1].strip()
-
+            if len(partes) > 1 and partes[1].strip().isdigit():
+                numero = partes[1].strip()
             if len(partes) >= 3:
                 cidade = partes[-3].strip()
 
-            complemento = numero if numero else (
-                plus_code.split()[0] if plus_code else "S/N"
-            )
-
-            return (
-                f"{rua}, {complemento}",
-                f"{cidade} - {estado}"
-            )
-
+            complemento = numero if numero else (short_plus_code if short_plus_code else "S/N")
+            return (f"{rua}, {complemento}", f"{cidade} - {estado}", short_plus_code)
     except Exception:
         pass
 
@@ -271,61 +215,27 @@ def buscar_endereco_gps(lat, lon):
     # OPENSTREETMAP
     # ==========================================================
     try:
-
         geo = Nominatim(user_agent="croqui_vivo")
-
         loc = geo.reverse(f"{lat}, {lon}", timeout=8)
-
         if loc:
-
             addr = loc.raw.get("address", {})
-
-            rua = (
-                addr.get("road")
-                or addr.get("pedestrian")
-                or addr.get("highway")
-                or ""
-            )
-
+            rua = addr.get("road") or addr.get("pedestrian") or addr.get("highway") or ""
             numero = addr.get("house_number", "")
-
-            cidade = (
-                addr.get("city")
-                or addr.get("town")
-                or addr.get("village")
-                or addr.get("municipality")
-                or ""
-            )
+            cidade = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("municipality") or ""
 
             if rua:
-
-                complemento = numero if numero else (
-                    plus_code.split()[0] if plus_code else "S/N"
-                )
-
-                return (
-                    f"{rua}, {complemento}",
-                    f"{cidade} - {estado}"
-                )
-
+                complemento = numero if numero else (short_plus_code if short_plus_code else "S/N")
+                return (f"{rua}, {complemento}", f"{cidade} - {estado}", short_plus_code)
     except Exception:
         pass
 
     # ==========================================================
     # ÚLTIMO RECURSO
     # ==========================================================
-
     if plus_code:
-        return (
-            f"Plus Code: {plus_code}",
-            f"{cidade} - {estado}" if cidade else estado
-        )
+        return (f"Plus Code: {plus_code}", f"{cidade} - {estado}" if cidade else estado, short_plus_code)
 
-    return (
-        f"GPS: {lat}, {lon}",
-        f"{cidade} - {estado}" if cidade else estado
-    )
-
+    return (f"GPS: {lat}, {lon}", f"{cidade} - {estado}" if cidade else estado, "")
 
 def formatar_texto(texto):
     if not texto: return ""
@@ -340,9 +250,7 @@ def formatar_texto(texto):
     for p in placas: texto = texto.replace(p, p.upper())
     return texto
 
-
 def pct_to_pt(xpct, ypct, width_pt, height_pt): return xpct * width_pt, ypct * height_pt
-
 
 def organizar_tratativas(texto_bruto):
     texto = re.sub(r'\b(?:feito|realizado)\b', ' ', texto_bruto, flags=re.IGNORECASE)
@@ -350,7 +258,6 @@ def organizar_tratativas(texto_bruto):
     padrao_num = r'(?=\b(?:\d{1,4}\s*(?:fus[ãa]o|fus[õo]es|testes?|emendas?|ceo|caixas?|aberturas?|reaberturas?|ptro)|vt\s+sobressalente)\b)'
     texto = re.sub(padrao_num, '\n', texto, flags=re.IGNORECASE)
     return texto
-
 
 def extrair_tronco_seguro(text):
     texto_limpo = text.replace('*', '')
@@ -368,7 +275,6 @@ def extrair_tronco_seguro(text):
             if m_limpo and m_limpo != "0": validos.append(m_limpo)
     if validos: return validos[-1]
     return ""
-
 
 def extrair_executantes_seguro(text, db):
     exec_list = []
@@ -412,7 +318,6 @@ def extrair_executantes_seguro(text, db):
                 exec_list.append({'name': db_name.title(), 're': db['tecnicos'][db_name].get('re', '')})
     return exec_list
 
-
 def extrair_siglas_seguro(text):
     texto_limpo = re.sub(r'http[s]?://\S+', '', text, flags=re.IGNORECASE)
     padroes = [
@@ -431,11 +336,10 @@ def extrair_siglas_seguro(text):
             if m[0].upper() != "VIVO" and m[1].upper() != "COM": return m[0].upper(), m[1].upper()
     return "", ""
 
-
 def extract_fields_sigitm(text, db):
     data = {key: '' for key in
             ['ta', 'codigo_obra', 'causa', 'endereco', 'localidade', 'es', 'at', 'tronco', 'veiculo', 'data',
-             'supervisor', 'lat', 'lon']}
+             'supervisor', 'lat', 'lon', 'plus_code']}
     m_sgm = re.search(r"(?:SGM|OBRA)[\s:\-]*(\d{8,})", text, re.IGNORECASE)
     if m_sgm: data['codigo_obra'] = m_sgm.group(1)
     m_causa = re.search(r"Causa:\s*([^\n]+)", text, re.IGNORECASE)
@@ -443,9 +347,10 @@ def extract_fields_sigitm(text, db):
     m_gps = re.search(r"Lat\s*([-.\d]+)\s*Long\s*([-.\d]+)", text, re.IGNORECASE)
     if m_gps:
         data['lat'], data['lon'] = m_gps.group(1), m_gps.group(2)
-        end_gps, loc_gps = buscar_endereco_gps(data['lat'], data['lon'])
+        end_gps, loc_gps, p_code = buscar_endereco_gps(data['lat'], data['lon'])
         if end_gps: data['endereco'] = end_gps
         if loc_gps: data['localidade'] = loc_gps
+        if p_code: data['plus_code'] = p_code
     data['es'], data['at'] = extrair_siglas_seguro(text)
     data['tronco'] = extrair_tronco_seguro(text)
     m_data = re.search(r"Data:\s*(\d{2}/\d{2}/\d{4})", text, re.IGNORECASE)
@@ -463,11 +368,10 @@ def extract_fields_sigitm(text, db):
     raw_mat = m_acao.group(1).strip() if m_acao else ""
     return data, raw_mat
 
-
 def extract_fields(text, db):
     data = {key: '' for key in
             ['ta', 'codigo_obra', 'causa', 'endereco', 'localidade', 'es', 'at', 'tronco', 'veiculo', 'data',
-             'supervisor', 'lat', 'lon']}
+             'supervisor', 'lat', 'lon', 'plus_code']}
     text = text.replace('\r\n', '\n').strip()
     m_ta = re.search(r"(?:TA|T\.A\.?|TICKET)\s*[:\-]?\s*\*?(\d{8,})\*?", text, re.IGNORECASE)
     if m_ta:
@@ -511,10 +415,11 @@ def extract_fields(text, db):
     match_gps = re.search(r"(-2\d\.\d+)[^\d\-]+(-4\d\.\d+)", text)
     if match_gps:
         data['lat'], data['lon'] = match_gps.group(1), match_gps.group(2)
-        end_gps, loc_gps = buscar_endereco_gps(data['lat'], data['lon'])
+        end_gps, loc_gps, p_code = buscar_endereco_gps(data['lat'], data['lon'])
         if end_gps:
             if not data['endereco'] or len(data['endereco']) < 5: data['endereco'] = end_gps
             if not data['localidade'] and loc_gps: data['localidade'] = loc_gps
+            if p_code: data['plus_code'] = p_code
     data['executantes_parsed'] = extrair_executantes_seguro(text, db)
     if data['executantes_parsed']:
         p_primeiro = data['executantes_parsed'][0]['name'].lower()
@@ -533,7 +438,6 @@ def extract_fields(text, db):
         raw_mat = "\n".join(tmp)
     return data, raw_mat
 
-
 def detect_launch(material_lines):
     joined = " ".join(material_lines).lower()
     if "repuxad" in joined: return None
@@ -544,12 +448,10 @@ def detect_launch(material_lines):
         if m: return int(m.group(1))
     return None
 
-
 def detect_double_point(material_lines):
     joined = " ".join(material_lines).lower()
     if re.search(r"\b(?:02|2)\s*(?:reabertura|abertura|ceo|caixa|ctop|emenda)", joined): return True
     return False
-
 
 def extrair_vt_sobressalente(linhas_ou_texto):
     vts = []
@@ -568,7 +470,6 @@ def extrair_vt_sobressalente(linhas_ou_texto):
             if not any(v['len'] == vt_len and v['xc'] == xc_idx for v in vts): vts.append({'len': vt_len, 'xc': xc_idx})
     return vts
 
-
 def generate_pps(total_length, vt_each=15, extra_vt=0):
     usable = total_length - (2 * vt_each) - extra_vt
     if usable <= 0: return []
@@ -578,7 +479,6 @@ def generate_pps(total_length, vt_each=15, extra_vt=0):
     spans = [base_span] * num_spans
     for i in range(resto): spans[i] += 1
     return spans
-
 
 def dividir_tratativas(material_lines):
     divs = ["fus", "fusão", "fusões", "fusao", "tubo", "loose", "teste", "otdr"]
@@ -611,7 +511,6 @@ def dividir_tratativas(material_lines):
         p1.append(orig)
     return p1, p2
 
-
 def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     if vts_extra is None: vts_extra = []
     packet = io.BytesIO()
@@ -632,7 +531,7 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
         for idx, ln in enumerate(str(text).split('\n')): c.drawString(x, y - (idx * (size + 2)), ln)
 
     for k, v in parsed.items():
-        if k != 'executantes_parsed': put_xy(k, v)
+        if k not in ['executantes_parsed', 'plus_code']: put_xy(k, v)
 
     for i, item in enumerate(parsed.get('executantes_parsed', [])):
         if i >= EXEC_CONFIG['max_rows']: break
@@ -669,10 +568,21 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     c.line(lx, dy, rx, dy);
     c.setDash([])
 
-    if parsed.get('endereco'):
+    endereco_val = parsed.get('endereco', '')
+    plus_code_val = parsed.get('plus_code', '')
+    texto_local = ""
+
+    if endereco_val and plus_code_val:
+        texto_local = f"{endereco_val}             Plus Code: {plus_code_val}"
+    elif plus_code_val:
+        texto_local = f"Plus Code: {plus_code_val}"
+    else:
+        texto_local = endereco_val
+
+    if texto_local:
         c.setFont('Helvetica-Bold', 10)
-        tw = c.stringWidth(parsed['endereco'], 'Helvetica-Bold', 10)
-        c.drawString(((lx + rx) / 2) - (tw / 2), dy - 100, parsed['endereco'])
+        tw = c.stringWidth(texto_local, 'Helvetica-Bold', 10)
+        c.drawString(((lx + rx) / 2) - (tw / 2), dy - 100, texto_local)
 
     def draw_box(x, y, w, h, t, lines, max_linhas=5):
         largura_coluna = 120
@@ -764,7 +674,6 @@ def create_overlay(parsed, materials_raw, pp_list, vts_extra=None):
     packet.seek(0)
     return packet
 
-
 def merge_overlay(overlay_stream):
     out_stream = io.BytesIO()
     if not os.path.exists(TEMPLATE_PDF):
@@ -779,7 +688,6 @@ def merge_overlay(overlay_stream):
     out_stream.seek(0)
     return out_stream
 
-
 # ==========================================
 # FUNÇÕES E BLUEPRINT KML
 # ==========================================
@@ -787,7 +695,6 @@ def remove_namespace(tree):
     for elem in tree.iter():
         if '}' in elem.tag: elem.tag = elem.tag.split('}', 1)[1]
     return tree
-
 
 def read_kml(file_path):
     if not os.path.exists(file_path): return []
@@ -804,7 +711,6 @@ def read_kml(file_path):
                 pass
     return sorted(places, key=lambda p: p["name"].lower())
 
-
 def add_placemark(file_path, name, lat, lon):
     tree = remove_namespace(ET.parse(file_path))
     root = tree.getroot()
@@ -816,25 +722,19 @@ def add_placemark(file_path, name, lat, lon):
     tree.write(file_path, encoding='utf-8', xml_declaration=True)
     return True
 
-
 def get_coordinates_from_link(link):
-    match = re.search(r"https:\/\/(?:www\.)?google\.com\/maps\/(?:[\w\-]+\/\@|\?q=|\?ll=)(-?\d+\.\d+),(-?\d+\.\d+)",
-                      link)
+    match = re.search(r"https:\/\/(?:www\.)?google\.com\/maps\/(?:[\w\-]+\/\@|\?q=|\?ll=)(-?\d+\.\d+),(-?\d+\.\d+)", link)
     return (match.group(1), match.group(2)) if match else (None, None)
 
-
 mapa_bp = Blueprint('mapa', __name__, url_prefix='/mapa')
-
 
 def clean_firebase_key(name):
     return str(name).replace('.', '_').replace('#', '_').replace('$', '_').replace('[', '_').replace(']', '_')
 
-
 @mapa_bp.route('/')
 def index_mapa():
     places_kml = read_kml(KML_PATH)
-    db, locais_nuvem, places_nuvem, deletados, nomes_na_nuvem = load_db(), load_db().get('locais_kml',
-                                                                                         {}), [], set(), set()
+    db, locais_nuvem, places_nuvem, deletados, nomes_na_nuvem = load_db(), load_db().get('locais_kml', {}), [], set(), set()
     for safe_key, data in locais_nuvem.items():
         if isinstance(data, dict):
             nome_real = data.get('name', safe_key)
@@ -848,18 +748,14 @@ def index_mapa():
         if p['name'] not in nomes_na_nuvem and p['name'] not in deletados: todos_places.append(p)
     return render_template_string(KML_HTML, places=sorted(todos_places, key=lambda p: str(p.get("name", "")).lower()))
 
-
 @mapa_bp.route('/add', methods=['POST'])
 def add():
-    name, lat, lon = request.form['name'].upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon',
-                                                                                                                 '').strip()
+    name, lat, lon = request.form['name'].upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon', '').strip()
     maps_link = request.form.get('mapsLink')
     if maps_link:
         lat, lon = get_coordinates_from_link(maps_link)
-        if not lat or not lon: flash("Link do Google Maps inválido.", "error"); return redirect(
-            url_for('mapa.index_mapa'))
-    if not lat or not lon: flash("Preencha as coordenadas ou cole um link do Maps.", "error"); return redirect(
-        url_for('mapa.index_mapa'))
+        if not lat or not lon: flash("Link do Google Maps inválido.", "error"); return redirect(url_for('mapa.index_mapa'))
+    if not lat or not lon: flash("Preencha as coordenadas ou cole um link do Maps.", "error"); return redirect(url_for('mapa.index_mapa'))
     safe_name = clean_firebase_key(name)
     db = load_db()
     if safe_name in db['locais_kml'] and not db['locais_kml'][safe_name].get('deleted'):
@@ -873,12 +769,9 @@ def add():
     flash("Local adicionado com sucesso!", "success");
     return redirect(url_for('mapa.index_mapa'))
 
-
 @mapa_bp.route('/edit', methods=['POST'])
 def edit():
-    orig_name, new_name, lat, lon = request.form.get('original_name', '').strip(), request.form.get('name',
-                                                                                                    '').upper().strip(), request.form.get(
-        'lat', '').strip(), request.form.get('lon', '').strip()
+    orig_name, new_name, lat, lon = request.form.get('original_name', '').strip(), request.form.get('name', '').upper().strip(), request.form.get('lat', '').strip(), request.form.get('lon', '').strip()
     maps_link = request.form.get('mapsLink')
     if maps_link:
         parsed_lat, parsed_lon = get_coordinates_from_link(maps_link)
@@ -890,7 +783,6 @@ def edit():
     flash("Local atualizado com sucesso!", "success");
     return redirect(url_for('mapa.index_mapa'))
 
-
 @mapa_bp.route('/delete', methods=['POST'])
 def delete():
     name = request.form.get('name', '').strip()
@@ -899,7 +791,6 @@ def delete():
     save_db(db);
     flash(f"Local {name} apagado com sucesso!", "success");
     return redirect(url_for('mapa.index_mapa'))
-
 
 app.register_blueprint(mapa_bp)
 
@@ -1002,7 +893,10 @@ PASTE_HTML = """<!doctype html><html><head><meta charset="utf-8"><meta name="vie
 FORM_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Confirmar Dados - Gerador de Croqui</title>
 <style>body{font-family:'Segoe UI',sans-serif;background:#f0f2f5;padding:10px;margin:0} .container{width:95%;max-width:900px;margin:10px auto;background:#fff;padding:20px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.05);box-sizing:border-box} input,textarea{width:100%;padding:12px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;font-size:16px;box-sizing:border-box} textarea{height:150px;font-family:monospace} button{padding:15px;font-size:16px;border:none;border-radius:5px;cursor:pointer;font-weight:bold;color:#fff;width:100%;margin-bottom:10px} #btn-validate{background:#28a745} #btn-validate:hover{background:#218838} h3{margin-top:20px;border-bottom:2px solid #eee;padding-bottom:10px;color:#444;font-size:18px} label{font-weight:600;font-size:14px;color:#555;display:block;margin-bottom:5px} .error{border:2px solid #dc3545!important;background:#fff0f0} .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:15px} .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px} @media(max-width:768px){.grid-2,.grid-3{grid-template-columns:1fr;gap:10px} .container{padding:15px;width:100%}} .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999;display:none;justify-content:center;align-items:center} .modal-content{background:#fff;padding:25px;border-radius:12px;width:90%;max-width:400px;box-shadow:0 5px 15px rgba(0,0,0,0.3)} .modal-title{font-size:1.2rem;font-weight:bold;margin-bottom:15px;color:#dc3545} .modal-list{margin-bottom:20px;padding-left:20px;color:#333} .modal-actions{display:flex;flex-direction:column;gap:10px} #btn-modal-back{background:#6c757d} #btn-modal-proceed{background:#007bff} .tag{display:inline-block;background:#e9ecef;color:#333;padding:8px 14px;border-radius:20px;margin:4px;font-size:14px;border:1px solid #ddd} .tag span{margin-left:10px;cursor:pointer;color:#dc3545;font-weight:bold} #exec-list{max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:4px;margin-bottom:10px} #exec-list div{padding:12px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;justify-content:space-between} #exec-list div:hover{background:#f8f9fa;color:#007bff} .area-badge{color:#999;font-size:0.9em} .back-btn{background:#007bff;text-decoration:none;display:block;color:white;padding:15px;border-radius:5px;text-align:center;margin-bottom:10px;font-weight:bold}</style></head>
 <body><div id="modal-overlay" class="modal-overlay"><div class="modal-content"><div class="modal-title">Campos Vazios</div><p>Faltam preencher:</p><ul id="modal-list" class="modal-list"></ul><div class="modal-actions"><button id="btn-modal-back" type="button">Voltar</button><button id="btn-modal-proceed" type="button">Gerar Assim Mesmo</button></div></div></div>
-<div class="container"><form method="post" action="/generate" target="_blank"><input type="hidden" name="lat" value="{{ data.get('lat','') }}"><input type="hidden" name="lon" value="{{ data.get('lon','') }}">
+<div class="container"><form method="post" action="/generate" target="_blank">
+<input type="hidden" name="lat" value="{{ data.get('lat','') }}">
+<input type="hidden" name="lon" value="{{ data.get('lon','') }}">
+<input type="hidden" name="plus_code" value="{{ data.get('plus_code','') }}">
 <div class="grid-3"><input type="hidden" name="or_ot" value="{{ data.get('or_ot','') }}"><div><label>TA</label><input name="ta" value="{{ data.get('ta','') }}"></div><div><label>Código Obra (SGM)</label><input name="codigo_obra" value="{{ data.get('codigo_obra','') }}"></div></div>
 <label>Causa</label><input name="causa" value="{{ data.get('causa','') }}"><label>Endereço</label><input name="endereco" value="{{ data.get('endereco','') }}">
 <div class="grid-3"><div><label>Localidade</label><input name="localidade" value="{{ data.get('localidade','') }}"></div><div><label>ES</label><input name="es" value="{{ data.get('es','') }}"></div><div><label>AT</label><input name="at" value="{{ data.get('at','') }}"></div></div>
@@ -1280,7 +1174,6 @@ KML_HTML = """<!DOCTYPE html>
 </script>
 </body></html>"""
 
-
 # ==========================================
 # ROTAS INVISÍVEIS PARA O ROBÔ DO CAPTCHA
 # ==========================================
@@ -1290,7 +1183,6 @@ def disparar_robo_login(user, pwd):
     loop.run_until_complete(gerar_sessao_interativa(user, pwd))
     loop.close()
 
-
 @app.route('/api/iniciar_login', methods=['POST'])
 def api_iniciar_login():
     user, pwd = request.form.get('user'), request.form.get('pwd')
@@ -1298,7 +1190,6 @@ def api_iniciar_login():
         if os.path.exists(f): os.remove(f)
     threading.Thread(target=disparar_robo_login, args=(user, pwd)).start()
     return jsonify({"status": "ok"})
-
 
 @app.route('/api/status_login')
 def api_status_login():
@@ -1309,12 +1200,10 @@ def api_status_login():
         return jsonify({"status": "esperando_captcha", "img": "/static/captcha.png"})
     return jsonify({"status": "carregando"})
 
-
 @app.route('/api/enviar_captcha', methods=['POST'])
 def api_enviar_captcha():
     with open('static/captcha_answer.txt', 'w') as f: f.write(request.form.get('captcha'))
     return jsonify({"status": "enviado"})
-
 
 # --- ROTAS DE ADMINISTRAÇÃO E COMUNICAÇÃO FIREBASE ---
 @app.route('/login', methods=['GET', 'POST'])
@@ -1327,10 +1216,8 @@ def login():
             return render_template_string(LOGIN_HTML, erro=True)
     return render_template_string(LOGIN_HTML, erro=False)
 
-
 @app.route('/logout')
 def logout(): session.pop('admin_logged_in', None); return redirect(url_for('index'))
-
 
 @app.route('/api/update_or_ot', methods=['POST'])
 def api_update_or_ot():
@@ -1340,7 +1227,6 @@ def api_update_or_ot():
         save_db(db);
         return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
-
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -1380,7 +1266,6 @@ def admin():
         return redirect(url_for('admin'))
     return render_template_string(ADMIN_HTML, tecnicos=dict(sorted(db['tecnicos'].items())), veiculos=db['veiculos'])
 
-
 @app.route('/relatorios', methods=['GET', 'POST'])
 def relatorios():
     if not session.get('admin_logged_in'): return redirect(url_for('login'))
@@ -1391,22 +1276,18 @@ def relatorios():
         return redirect(url_for('relatorios'))
     return render_template_string(RELATORIOS_HTML, croquis=dict(sorted(db.get('croquis', {}).items(), reverse=True)))
 
-
 # --- ROTAS PRINCIPAIS ---
 @app.route('/')
 def index(): return render_template_string(PASTE_HTML)
-
 
 @app.route('/tecnicos')
 def tecnicos(): return json.dumps(
     [{'name': k, 're': v.get('re', ''), 'area': v.get('area', ''), 'supervisor': v.get('supervisor', '')} for k, v in
      load_db()['tecnicos'].items()])
 
-
 @app.route('/form')
 def form_vazio(): return render_template_string(FORM_HTML, data={}, itens_texto="", executantes_list=[],
                                                 veiculos_map=load_db()['veiculos'])
-
 
 @app.route('/preencher', methods=['POST'])
 def preencher():
@@ -1460,24 +1341,20 @@ def preencher():
     return render_template_string(FORM_HTML, data=parsed_data, itens_texto=itens_texto, executantes_list=exec_names,
                                   veiculos_map=db['veiculos'])
 
-
 @app.route('/generate', methods=['POST'])
 def generate():
     db = load_db()
     execs_string = request.form.get('executantes', '')
     exec_list = []
 
-    # 1. Pega a TA atual para criarmos o código
     ta_atual = request.form.get('ta', '')
     codigo = re.sub(r'[^\w\-]', '', ta_atual or f"doc_{random.randint(1000, 9999)}")
 
-    # 2. Resgata os REs antigos caso o técnico não esteja cadastrado no banco do Admin
     executantes_antigos = {}
     if codigo in db.get('croquis', {}):
         for e in db['croquis'][codigo].get('parsed', {}).get('executantes_parsed', []):
             executantes_antigos[e['name'].lower()] = e.get('re', '')
 
-    # 3. Monta a lista de técnicos com a "memória" ativada
     if execs_string:
         for nome in execs_string.split(','):
             clean = nome.strip().lower()
@@ -1485,7 +1362,7 @@ def generate():
 
             if clean in db['tecnicos']:
                 re_code = db['tecnicos'][clean].get('re', '')
-            elif clean in executantes_antigos:  # Se não achou no BD, pega do croqui antigo!
+            elif clean in executantes_antigos:
                 re_code = executantes_antigos[clean]
 
             exec_list.append({'name': nome.strip().title(), 're': re_code})
@@ -1497,7 +1374,8 @@ def generate():
         'es': request.form.get('es', ''), 'at': request.form.get('at', ''),
         'tronco': request.form.get('tronco', ''), 'veiculo': request.form.get('veiculo', ''),
         'data': request.form.get('data', ''), 'supervisor': request.form.get('supervisor', ''),
-        'executantes_parsed': exec_list, 'lat': request.form.get('lat', ''), 'lon': request.form.get('lon', '')
+        'executantes_parsed': exec_list, 'lat': request.form.get('lat', ''), 'lon': request.form.get('lon', ''),
+        'plus_code': request.form.get('plus_code', '')
     }
 
     itens_raw = organizar_tratativas(request.form.get('itens', ''))
@@ -1505,11 +1383,8 @@ def generate():
     db['croquis'][codigo] = {'parsed': parsed, 'itens_raw': itens_raw}
     save_db(db)
 
-    # Redireciona o celular para a rota com '.pdf' na URL
     return redirect(url_for('visualizar_croqui', ta=codigo))
 
-
-# === NOVA ROTA MÁGICA PARA RESOLVER O PROBLEMA DO ANDROID ===
 @app.route('/croqui/<ta>.pdf')
 def visualizar_croqui(ta):
     db = load_db()
@@ -1540,11 +1415,9 @@ def visualizar_croqui(ta):
     pp_list = generate_pps(total_len, extra_vt=total_extra_vt) if total_len is not None and total_len > 0 else (
         [0, 0, 0, 0] if is_double_point else [])
 
-    # Cria o PDF na memória e manda abrir na tela (False)
     overlay_stream = create_overlay(parsed, material_lines, pp_list, vts_extra)
     final_pdf_stream = merge_overlay(overlay_stream)
 
-    # O Android vai ver o '.pdf' na URL e vai baixar sem erros quando o usuário clicar no botão nativo!
     return send_file(
         final_pdf_stream,
         download_name=f"{ta}.pdf",
@@ -1552,10 +1425,6 @@ def visualizar_croqui(ta):
         mimetype='application/pdf'
     )
 
-
-# ==========================================
-# ROTAS DE ANEXOS E GERAÇÃO COMPLETA
-# ==========================================
 @app.route('/api/upload_anexo', methods=['POST'])
 def api_upload_anexo():
     ta, files, db = request.form.get('ta'), request.files.getlist('pdf_files'), load_db()
@@ -1568,14 +1437,12 @@ def api_upload_anexo():
         return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
 
-
 @app.route('/api/limpar_anexos', methods=['POST'])
 def api_limpar_anexos():
     ta, db = request.form.get('ta'), load_db()
     if ta and 'croquis' in db and ta in db['croquis']: db['croquis'][ta]['anexos'] = []; save_db(db); return jsonify(
         {"status": "success"})
     return jsonify({"status": "error"}), 400
-
 
 @app.route('/gerar_completo/<ta>')
 def gerar_completo(ta):
@@ -1617,9 +1484,7 @@ def gerar_completo(ta):
     else:
         base_pdf_stream.seek(0); final_pdf = base_pdf_stream
 
-    # ATUALIZADO AQUI PARA ATIVAR O PREVIEW:
     return send_file(final_pdf, download_name=f"TA_{ta}_Arquivos.pdf", as_attachment=False, mimetype='application/pdf')
-
 
 if __name__ == '__main__':
     if not os.path.exists(TEMPLATE_PDF):
