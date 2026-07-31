@@ -67,7 +67,13 @@ if not firebase_admin._apps:
 TELEGRAM_API_ID = 33091552
 TELEGRAM_API_HASH = 'd09dcafbf4b9ba5427d80e5b4cad5837'
 TELEGRAM_GROUP_IDS = [-4209680542, -4112543320]
-TELEGRAM_SESSION = 'sessao_usuario'
+
+session_env = os.environ.get("TELEGRAM_SESSION_STRING")
+
+if session_env:
+    TELEGRAM_SESSION = StringSession(session_env)
+else:
+    TELEGRAM_SESSION = 'sessao_usuario'
 
 DB_ALIASES = {
     "edenilson": "edenilson santos", "edenilson de souza": "edenilson santos",
