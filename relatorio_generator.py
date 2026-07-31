@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import asyncio
 import textwrap
 import threading
+from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 # --- IMPORTAÇÃO SIGITM ---
