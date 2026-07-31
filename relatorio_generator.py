@@ -45,9 +45,19 @@ FIREBASE_DB_URL = 'https://nuvemgeradordecroqui-default-rtdb.firebaseio.com/tecn
 
 if not firebase_admin._apps:
     try:
-        cred = credentials.Certificate("firebase-key.json")
+        
+        firebase_env = os.environ.get("FIREBASE_CREDENTIALS")
+        
+        if firebase_env:
+            
+            cred_dict = json.loads(firebase_env)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            cred = credentials.Certificate("firebase-key.json")
+        
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
         print("✅ Conectado ao Firebase com sucesso!")
+        
     except Exception as e:
         print(f"❌ Erro ao conectar ao Firebase: {e}")
 
