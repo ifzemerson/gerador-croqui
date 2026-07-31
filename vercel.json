@@ -1,0 +1,14 @@
+{
+  "builds": [
+    {
+      "src": "relatorio_generator.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "relatorio_generator.py"
+    }
+  ]
+}
