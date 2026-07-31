@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 import asyncio
 import textwrap
 import threading
-from telethon import TelegramClient
+from telethon.sessions import StringSession
 
 # --- IMPORTAÇÃO SIGITM ---
 from scraper_vivo import buscar_dados_ta_sigitm, gerar_sessao_interativa
