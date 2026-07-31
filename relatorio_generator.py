@@ -29,8 +29,6 @@ app.secret_key = "1307"
 # --- CONFIGURAÇÕES GERAIS ---
 GOOGLE_API_KEY = "AIzaSyCZXAgi1EQntbx7U3SyZI3I4xWj25E2sq0"
 TEMPLATE_PDF = "CROQUI.pdf"
-OUTPUT_DIR = Path("/tmp/outputs")
-OUTPUT_DIR.mkdir(exist_ok=True)
 
 STATIC_DIR = Path("static")
 STATIC_DIR.mkdir(exist_ok=True)
